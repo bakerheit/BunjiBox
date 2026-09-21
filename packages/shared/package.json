@@ -1,0 +1,13 @@
+{
+  "name": "@bunji/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser- and Node-safe code used by every BunjiBox surface: bot shapes, runtime catalog, API clients, token math.",
+  "exports": {
+    "./*": "./src/*.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

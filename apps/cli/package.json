@@ -1,0 +1,29 @@
+{
+  "name": "@bunji/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The `bunji` terminal app. The root package owns the bin so `npm link` keeps working.",
+  "exports": {
+    ".": "./index.mjs",
+    "./*": "./*.mjs"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test *.test.mjs"
+  },
+  "dependencies": {
+    "@bunji/core": "*",
+    "@bunji/shared": "*",
+    "ink": "^7.1.1",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "react": "^19.2.8",
+    "slice-ansi": "^9.0.1",
+    "strip-ansi": "^7.2.0",
+    "wrap-ansi": "^10.0.1"
+  },
+  "devDependencies": {
+    "@xterm/headless": "^6.0.0"
+  }
+}

@@ -2,6 +2,24 @@
 
 BunjiBox is a local agent workbench for Claude, Codex, and a temporary Ollama endpoint. It uses the subscription-backed CLIs already signed in on the Mac, while Ollama can run on another trusted LAN device such as a Raspberry Pi.
 
+## Repo layout
+
+npm workspaces, one lockfile, no build graph tool. Every package is private.
+
+```
+apps/app       @bunji/app      workbench UI (Vite + React)
+apps/site      @bunji/site     marketing site, same stack as the app
+apps/server    @bunji/server   local-only HTTP bridge on 127.0.0.1:4318
+apps/cli       @bunji/cli      the `bunji` terminal app
+packages/core  @bunji/core     Node-only runtime and stores
+packages/shared @bunji/shared  browser- and Node-safe bot shapes, clients, token math
+packages/ui    @bunji/ui       design tokens shared by the app and the site
+```
+
+Dependencies only ever point downward: apps depend on packages, `core` depends
+on `shared`, and `shared` depends on nothing. The root package owns the `bunji`
+bin so `npm link` keeps working.
+
 ## Run it
 
 ### Terminal app
@@ -76,6 +94,34 @@ Open `http://localhost:5173/` or the Mac's WiFi address on a phone.
 
 The Vite server proxies `/api` to the local-only bridge on `127.0.0.1:4318`.
 
+### Agent files and right sidebar
+
+The right sidebar opens to **Files**, with compact tabs for **Memory**, **Activity**
+(tool calls and tokens), and **Settings**. Computer access is in Settings;
+appearance controls expand when needed. On phones, the folder icon opens the
+same sidebar as a drawer.
+
+Files use a large-icon grid or compact list, with search, type filters, and sorting.
+Click a file for an image, Markdown, or text preview; download it to the device
+you are using. Other formats can be downloaded and opened in their own apps.
+Previews read up to 128 KB; downloads return the entire original file.
+
+For shared web/interactive-CLI runs with computer writes enabled, Bunji indexes
+successful Codex file changes and Claude Write/Edit calls. New standalone
+deliverables default to `outputs/<bot-id>/<request-id>/` in the Bunji data
+directory, or `.bunji/outputs/<bot-id>/<request-id>/` inside a selected folder.
+These output folders are checked while the agent works and when it finishes.
+Agents also get a `files_publish` tool to register files generated elsewhere,
+including shell output. Shell-created files outside the output folder need that
+tool call to appear; Bunji does not scan the whole machine.
+
+The index persists in the shared workspace and syncs to connected devices.
+Older completed file-write events with absolute paths are recovered when the
+service starts; old relative paths or truncated logs cannot be recovered reliably.
+The browser only serves registered file IDs. HTML and SVG are text previews,
+not executable pages. Files moved or removed outside Bunji are marked unavailable.
+Deleting an agent does not delete its created files from disk.
+
 ## Runtime controls
 
 - Claude: Opus, Sonnet, or Haiku; low through max effort.
@@ -98,10 +144,11 @@ The Vite server proxies `/api` to the local-only bridge on `127.0.0.1:4318`.
 
 ## Shared runtime and sign-in
 
-The terminal and HTTP bridge share `core/runtime.mjs`: provider commands,
-model/effort validation, login checks, activity streams, and token accounting.
-Subscription meters share `server/usage.mjs`. The browser model catalog is also
-used by the terminal. No second copy of the agent runner is needed.
+The terminal and HTTP bridge share `packages/core/src/runtime.mjs`: provider
+commands, model/effort validation, login checks, activity streams, and token
+accounting. Subscription meters share `packages/core/src/usage.mjs`. The browser
+model catalog is also used by the terminal. No second copy of the agent runner
+is needed.
 
 Run `codex login` or `claude auth login` to connect the corresponding provider.
 The app checks current login status; no account state is hard-coded.
@@ -118,7 +165,7 @@ on a trusted network.
 
 ## Ongoing conversations and agent memory
 
-Open the book icon in chat to browse, create, edit, and follow linked Markdown
+Open the Memory tab in the agent sidebar to browse, create, edit, and follow linked Markdown
 notes. Memory lives in `~/.config/bunji/memory/<bot-id>/` (or your configured data
 directory), with stable `[[note-id|Title]]` links and source message IDs.
 

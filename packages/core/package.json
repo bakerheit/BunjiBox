@@ -1,0 +1,18 @@
+{
+  "name": "@bunji/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node-only agent runtime and stores: provider execution, run streams, usage, bots, chats, memory, files.",
+  "exports": {
+    "./*": "./src/*.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@bunji/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@bunji/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-only HTTP bridge on 127.0.0.1:4318 that the web app talks to.",
+  "main": "./server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test src/*.test.mjs"
+  },
+  "dependencies": {
+    "@bunji/core": "*",
+    "@bunji/shared": "*"
+  },
+  "devDependencies": {
+    "@bunji/app": "*",
+    "@bunji/cli": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "vite": "^8.3.0"
+  }
+}
