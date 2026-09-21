@@ -1,0 +1,40 @@
+.token-log { padding-top:16px; }
+.token-summary { border:1px solid #303030; border-radius:17px; background:#191919; padding:18px; }
+.token-eyebrow { display:flex; align-items:center; gap:7px; font-size:9px; letter-spacing:1.4px; color:#929292; }
+.token-total { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; font-size:33px; letter-spacing:-1px; margin-top:14px; }
+.token-total>span { color:#999; font-size:11px; letter-spacing:0; }
+.token-summary>p { color:#999; font-size:10px; margin-top:4px; }
+.token-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:20px; padding-top:14px; border-top:1px solid #303030; }
+.token-stats dt { color:#919191; font-size:10px; }
+.token-stats dd { font-size:13px; margin-top:4px; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.token-explainer,.token-footnote { color:#868686; font-size:10px; line-height:1.7; margin:16px 0; }
+.token-partial { font-size:10px; line-height:1.6; color:#c5b08f; margin-bottom:18px; }
+.token-log-list { display:grid; gap:13px; }
+.token-empty { display:flex; flex-direction:column; align-items:center; text-align:center; padding:32px 12px; gap:10px; color:#777; }
+.token-empty h3 { font-size:13px; color:#bbb; }
+.token-empty p { font-size:11px; line-height:1.7; }
+.token-request { border:1px solid #2c2c2c; border-radius:14px; padding:15px; background:#121212; }
+.token-request header { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.token-request header strong { font-size:12px; font-weight:500; }
+.token-request-status { color:#a7bcae; font-size:9px; background:#202923; padding:4px 7px; border-radius:99px; }
+.token-request-status.running { color:#abc2ed; background:#222b3b; }
+.token-request-status.failed { color:#d5a094; background:#30211d; }
+.token-runtime { color:#818181; font-size:10px; margin-top:7px; }
+.token-prompt { font-size:11px; color:#b3b3b3; line-height:1.6; margin-top:12px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow-wrap:anywhere; }
+.token-request-stats { display:grid; gap:7px; margin-top:16px; font-size:11px; }
+.token-request-stats>div { display:flex; justify-content:space-between; gap:8px; }
+.token-request-stats dt { color:#999; }
+.token-request-stats dt span { color:#696969; font-size:9px; }
+.token-request-stats dd { font-variant-numeric:tabular-nums; }
+.token-request-total { border-top:1px solid #2b2b2b; padding-top:10px; margin-top:3px; }
+.token-request-total dt { color:#ddd; }
+.token-request footer { display:flex; justify-content:space-between; gap:8px; font-size:9px; color:#777; margin-top:15px; }
+.token-request footer>span:first-child { display:flex; align-items:center; gap:4px; }
+.token-request-id { display:block; font-size:8px; color:#626262; overflow-wrap:anywhere; margin-top:9px; }
+.token-missing { color:#939393; font-size:10px; line-height:1.6; margin-top:11px; }
+.token-request-error { font-size:10px; line-height:1.6; color:#d4a291; margin-top:12px; overflow-wrap:anywhere; max-height:90px; overflow-y:auto; }
+.message-token-note { display:block; font-size:9px; color:#b3b3b3; margin-top:8px; text-align:left; }
+.message-token-note:hover { color:#fff; }
+.composer-debug { display:flex; justify-content:center; margin-top:6px; }
+.composer-debug button { display:flex; align-items:center; gap:5px; font-size:9px; color:#8f8f8f; padding:3px 6px; border-radius:5px; }
+.composer-debug button:hover { background:#232323; color:#ccc; }
