@@ -8,7 +8,7 @@ export const runtimes = {
     { id: 'gpt-5.5', label: 'GPT-5.5' },
   ] },
   ollama: { label: 'Ollama · Pi', models: [
-    { id: 'qwen3:1.7b', label: 'Qwen3 1.7B · Raspberry Pi' },
+    { id: 'gemma3:1b', label: 'Gemma3 1B · Raspberry Pi' },
   ] },
 }
 

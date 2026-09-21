@@ -94,6 +94,20 @@ Open `http://localhost:5173/` or the Mac's WiFi address on a phone.
 
 The Vite server proxies `/api` to the local-only bridge on `127.0.0.1:4318`.
 
+### Marketing site
+
+```bash
+npm run dev:site
+```
+
+Opens on `http://localhost:5174/`, so it can run alongside the workbench. It is
+the same stack as the app — Vite, React, Tailwind v4, shadcn, lucide — and pulls
+its colours from `@bunji/ui`, so the two cannot drift apart. `npm run build:site`
+emits a static bundle to `apps/site/dist`.
+
+Its test SSR-renders the page and cross-checks concrete claims (paths, model
+names, env vars) against this README, so editing one without the other fails.
+
 ### Agent files and right sidebar
 
 The right sidebar opens to **Files**, with compact tabs for **Memory**, **Activity**
@@ -126,7 +140,7 @@ Deleting an agent does not delete its created files from disk.
 
 - Claude: Opus, Sonnet, or Haiku; low through max effort.
 - Codex: GPT-6 Astra, GPT-5.6 Sol, Terra, Luna, or GPT-5.5; model-specific effort options.
-- Ollama · Pi: Qwen3 1.7B; low disables Qwen thinking and medium enables it.
+- Ollama · Pi: Gemma3 1B; the temporary connector runs it in chat mode.
 - Bot names, descriptions, avatars, provider, model, and effort persist in the
   shared workspace, not per-browser storage. Failed saves show a warning and retry.
 - Settings or the sidebar’s three-dot menu can delete an agent and its chat history. If it has memory notes,

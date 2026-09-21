@@ -1,0 +1,28 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@bunji/ui/theme.css";
+
+/* The site is dark-only. The app keeps its own chrome, so these stay local. */
+body {
+  background: var(--surface);
+  color: #e7e5e4;
+  font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--brand) 40%, transparent);
+}
+
+.grid-backdrop {
+  background-image:
+    linear-gradient(to right, var(--hairline) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--hairline) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 75%);
+}
+
+.brand-glow {
+  background: radial-gradient(ellipse 60% 50% at 50% 0%, color-mix(in oklab, var(--brand) 22%, transparent), transparent 70%);
+}

@@ -37,7 +37,7 @@ async function runOllama({ model, effort, prompt }, { signal, onActivity } = {})
   try {
     const response = await fetch(ollamaUrl() + '/api/chat', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], stream: true, think: effort !== 'low', keep_alive: '10m' }),
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], stream: true, think: model.startsWith('qwen3:') && effort !== 'low', keep_alive: '10m' }),
       signal,
     })
     if (!response.ok) {
@@ -71,7 +71,7 @@ async function runOllama({ model, effort, prompt }, { signal, onActivity } = {})
     activity.status = 'complete'; activity.text = final ? 'Response received from the Pi.' : 'The Pi closed the response early.'
     onActivity?.({ ...activity })
     if (thinking) {
-      const reasoning = { id: 'ollama-thinking', kind: 'reasoning', title: 'Qwen3 thinking', status: 'complete', text: thinking }
+      const reasoning = { id: 'ollama-thinking', kind: 'reasoning', title: 'Model thinking', status: 'complete', text: thinking }
       activities.push(reasoning); onActivity?.(reasoning)
     }
     if (!final || !text) return { text, usage: ollamaUsage(final), failed: true, activities, error: 'Ollama returned an empty response.', durationMs: Date.now() - startedAt }
