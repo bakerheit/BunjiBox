@@ -54,6 +54,11 @@ struct BunjiAPI: Sendable {
         try await request("/api/bots/\(segment(botID))", method: "PATCH", body: changes)
     }
 
+    func confirmFullMachine(botID: String, network: String) async throws -> BotListResponse {
+        try await request("/api/bots/\(segment(botID))/computer/enable-full-machine", method: "POST",
+                          body: ComputerConfirmation(computer: ComputerAccess(scope: "machine", level: "auto", network: network, folder: nil)))
+    }
+
     func createAvatarGeneration(_ payload: AvatarGenerationRequest) async throws -> AvatarGeneration {
         let response: AvatarGenerationResponse = try await request(
             "/api/avatar-generations", method: "POST", body: payload
@@ -120,3 +125,4 @@ struct BunjiAPI: Sendable {
 private struct HealthResponse: Decodable { let service: String }
 private struct ErrorResponse: Decodable { let error: String }
 private struct EmptyBody: Encodable {}
+private struct ComputerConfirmation: Encodable { let computer: ComputerAccess }

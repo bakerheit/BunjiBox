@@ -11,12 +11,19 @@ change. This branch does not change the native executor or its target allowlist.
 Run from the checkout that serves the backend:
 
 ```sh
-zsh experiments/computer-use-native/build-lab.sh
-swift build --package-path apps/macos
+npm run macos:app
+open apps/macos/dist/BunjiBox.app
 ```
 
-Enable and confirm **This Mac / full access** for a saved Codex or Claude bot
-using existing Computer access settings. In the native app's agent Settings,
+The app build also builds and signs the native helper in this checkout. The
+checkout-backed backend must run from this same checkout; copying only the app
+bundle does not install a standalone backend or its helper. `swift build` alone
+only compiles the main app; use `npm run macos:app` for the complete build.
+
+In the native app's agent Settings, click **Enable This Mac full access…** for
+a saved Codex or Claude bot and confirm once. This uses the dedicated server
+confirmation endpoint and replaces any folder limit. No web app or pairing is
+needed. Then, in the same Settings panel,
 choose **Native control → Apple Notes** and confirm. The picker persists
 `nativeComputer: "com.apple.Notes"` through the existing bot PATCH API. Older bots
 default to `off`. Folder access cannot enable native control. An unsupported

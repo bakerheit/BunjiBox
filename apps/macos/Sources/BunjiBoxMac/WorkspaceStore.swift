@@ -121,6 +121,13 @@ final class WorkspaceStore: ObservableObject {
         apply(try await api.patch(botID: botID, changes: changes))
     }
 
+    func confirmFullMachine(botID: String, network: String) async {
+        do {
+            apply(try await api.confirmFullMachine(botID: botID, network: network))
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     private func update(botID: String, changes: BotPatch) async {
         do {
             try await saveProfile(botID: botID, changes: changes)
