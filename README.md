@@ -8,6 +8,7 @@ npm workspaces, one lockfile, no build graph tool. Every package is private.
 
 ```
 apps/app       @bunji/app      workbench UI (Vite + React)
+apps/macos     Swift Package   native SwiftUI macOS app
 apps/site      @bunji/site     marketing site, same stack as the app
 apps/server    @bunji/server   local-only HTTP bridge on 127.0.0.1:4318
 apps/cli       @bunji/cli      the `bunji` terminal app
@@ -93,6 +94,23 @@ npm run dev -- --host 0.0.0.0
 Open `http://localhost:5173/` or the Mac's WiFi address on a phone.
 
 The Vite server proxies `/api` to the local-only bridge on `127.0.0.1:4318`.
+
+### Native macOS app
+
+The native SwiftUI client shares Bunji's local API and workspace with the web
+app and CLI. It includes the agent sidebar, continuous chat, Markdown replies,
+tool activity, honest token usage, Auto/Chat/Agent controls, model selection,
+and the effort slider without embedding a WebView.
+
+```bash
+npm run macos:build
+npm run macos:app
+open apps/macos/dist/BunjiBox.app
+```
+
+It can start the local Bunji API from this repository when needed. This alpha
+build uses Swift Package Manager and ad-hoc signing; full Xcode will be needed
+later for an app icon catalog, hardened runtime, notarization, and distribution.
 
 ### Marketing site
 
