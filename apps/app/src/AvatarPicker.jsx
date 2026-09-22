@@ -2,11 +2,13 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from 'r
 import AvatarGeneration from './AvatarGeneration'
 import { normalizeAvatarImage } from './avatar-generation'
 import './AvatarPicker.css'
+import { distinctAvatarShapes } from '@bunji/shared/avatars'
 
 const AvatarContext = createContext(null)
 const DEFAULT_AVATAR = { shape: 'hexagon', color: '#777777', image: null }
 const TABS = ['Avatar', 'Generate', 'Upload']
 const SHAPES = [
+  ...distinctAvatarShapes,
   { name: 'diamond', path: 'M 50 4 L 96 50 L 50 96 L 4 50 Z' },
   { name: 'circle', path: 'M 50 8 C 74 8 92 26 92 50 C 92 74 74 92 50 92 C 26 92 8 74 8 50 C 8 26 26 8 50 8 Z' },
   { name: 'pebble', path: 'M 57 11 C 75 11 86 26 91 46 C 98 68 82 89 58 90 C 34 92 10 79 8 58 C 6 36 30 11 57 11 Z' },
@@ -44,16 +46,20 @@ export function BotAvatar({ value = DEFAULT_AVATAR, small = false, selected = fa
   const shape = SHAPES.find(item => item.name === avatar.shape)
   const eyeY = shape.eyeY || 43
   const eyeX = shape.eyeX || 77
-  return <span className={`bot-avatar bb-bot-avatar${small ? ' small' : ''}`} role="img" aria-label={avatar.image ? 'Custom bot avatar' : `${avatar.shape} bot avatar`}>
+  return <span className={`bot-avatar bb-bot-avatar${small ? ' small' : ''}`} role="img" aria-label={avatar.image ? 'Custom bot avatar' : `${shape.label || avatar.shape} bot avatar`}>
     {avatar.image
       ? <img className="bb-bot-image" src={avatar.image} alt="" />
       : <svg className="bb-bot-art" viewBox="0 0 100 100" fill="none" aria-hidden="true">
         {selected && <path className="bb-bot-selection" d={shape.path} transform="translate(-5 -5) scale(1.1)" />}
         <path className="bb-bot-body" d={shape.path} fill={avatar.color} />
-        <g fill="#090a0a">
+        {shape.cx !== undefined ? <g fill="#090a0a">
+          <circle cx={shape.cx} cy={shape.cy} r="9" />
+          <circle cx={shape.cx + 13} cy={shape.cy - 13} r="2.5" />
+          <circle cx={shape.cx - 12} cy={shape.cy + 12} r="2" />
+        </g> : <g fill="#090a0a">
           <ellipse cx="54" cy={eyeY} rx="4.1" ry="8.3" transform={`rotate(-18 54 ${eyeY})`} />
           <ellipse cx={eyeX} cy={eyeY - 4} rx="4.1" ry="8.3" transform={`rotate(-18 ${eyeX} ${eyeY - 4})`} />
-        </g>
+        </g>}
       </svg>}
   </span>
 }
@@ -175,7 +181,8 @@ function AvatarEditorControls({ tone, inline }) {
             className="bb-avatar-shape"
             type="button"
             role="radio"
-            aria-label={`${shape.name[0].toUpperCase()}${shape.name.slice(1)} shape`}
+            aria-label={`${shape.label || shape.name[0].toUpperCase() + shape.name.slice(1)} shape`}
+            title={shape.label || shape.name[0].toUpperCase() + shape.name.slice(1)}
             aria-checked={activeShape === index}
             tabIndex={index === Math.max(0, activeShape) ? 0 : -1}
             onClick={() => selectShape(index)}

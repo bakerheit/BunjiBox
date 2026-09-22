@@ -36,6 +36,13 @@ struct ProfileChecks {
         } catch BunjiAPIError.http(let status, _) { precondition(status == 400) }
         let afterFailure = try await secondClient.bots().bots.first { $0.id == id }!
         precondition(afterFailure == reset, "Rejected saves must not change persisted settings")
+        for name in ["comet", "sprout", "ribbon", "orbit", "lantern", "notched-tile"] {
+            let avatar = BotAvatar(shape: name, color: "#00ad9c", image: nil)
+            _ = try await api.patch(botID: id, changes: BotPatch(avatar: avatar))
+            let reloaded = try await secondClient.bots().bots.first { $0.id == id }!
+            precondition(reloaded.avatar == avatar, "New shape must persist through the shared API")
+            precondition(reloaded.name == saved.name && reloaded.description == reset.description)
+        }
         print("Native profile upload, resize, persistence, image removal, partial edits, and rejection checks passed.")
     }
 }

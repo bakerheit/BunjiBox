@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AvatarPalette {
-    static let shapes = ["diamond", "circle", "pebble", "square", "pill", "triangle", "hexagon", "cloud", "drop"]
+    static let shapes = DistinctAvatarShapes.names + ["diamond", "circle", "pebble", "square", "pill", "triangle", "hexagon", "cloud", "drop"]
     static let colors = [
         (name: "White", value: "#ffffff"), (name: "Brown", value: "#895e34"),
         (name: "Red", value: "#ee1734"), (name: "Orange", value: "#ff6a00"),
@@ -51,27 +51,43 @@ struct AvatarView: View {
             } else {
                 ZStack {
                     BotSilhouette(name: avatar.shape).fill(Color(hex: avatar.color))
-                    let eyeY: CGFloat = avatar.shape == "triangle" ? 57 : avatar.shape == "drop" ? 54 : 43
-                    let eyeX: CGFloat = avatar.shape == "triangle" ? 70 : avatar.shape == "drop" ? 73 : 77
-                    Ellipse().fill(Color.black.opacity(0.9))
-                        .frame(width: size * 0.082, height: size * 0.166)
-                        .rotationEffect(.degrees(-18)).position(x: size * 0.54, y: size * eyeY / 100)
-                    Ellipse().fill(Color.black.opacity(0.9))
-                        .frame(width: size * 0.082, height: size * 0.166)
-                        .rotationEffect(.degrees(-18)).position(x: size * eyeX / 100, y: size * (eyeY - 4) / 100)
+                    if let center = DistinctAvatarShapes.aperture(avatar.shape) {
+                        Circle().fill(Color(hex: "#090a0a"))
+                            .frame(width: size * 0.18, height: size * 0.18)
+                            .position(x: size * center.x / 100, y: size * center.y / 100)
+                        Circle().fill(Color(hex: "#090a0a"))
+                            .frame(width: size * 0.05, height: size * 0.05)
+                            .position(x: size * (center.x + 13) / 100, y: size * (center.y - 13) / 100)
+                        Circle().fill(Color(hex: "#090a0a"))
+                            .frame(width: size * 0.04, height: size * 0.04)
+                            .position(x: size * (center.x - 12) / 100, y: size * (center.y + 12) / 100)
+                    } else {
+                        let eyeY: CGFloat = avatar.shape == "triangle" ? 57 : avatar.shape == "drop" ? 54 : 43
+                        let eyeX: CGFloat = avatar.shape == "triangle" ? 70 : avatar.shape == "drop" ? 73 : 77
+                        Ellipse().fill(Color.black.opacity(0.9))
+                            .frame(width: size * 0.082, height: size * 0.166)
+                            .rotationEffect(.degrees(-18)).position(x: size * 0.54, y: size * eyeY / 100)
+                        Ellipse().fill(Color.black.opacity(0.9))
+                            .frame(width: size * 0.082, height: size * 0.166)
+                            .rotationEffect(.degrees(-18)).position(x: size * eyeX / 100, y: size * (eyeY - 4) / 100)
+                    }
                 }
             }
         }
         .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(avatar.image == nil ? "\(avatar.shape.capitalized) avatar" : "Custom profile picture")
+        .accessibilityLabel(avatar.image == nil ? "\(DistinctAvatarShapes.label(avatar.shape)) avatar" : "Custom profile picture")
     }
 }
 
-// Matches the nine silhouettes in the web avatar picker, in a 100-point square.
+// Legacy silhouettes remain unchanged; new silhouettes share the same coordinate system.
 struct BotSilhouette: Shape {
     let name: String
     func path(in rect: CGRect) -> Path {
+        if let distinct = DistinctAvatarShapes.path(name) {
+            return distinct.applying(CGAffineTransform(scaleX: rect.width / 100, y: rect.height / 100))
+                .applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
+        }
         var p = Path()
         func move(_ x: CGFloat, _ y: CGFloat) { p.move(to: CGPoint(x: x, y: y)) }
         func line(_ x: CGFloat, _ y: CGFloat) { p.addLine(to: CGPoint(x: x, y: y)) }

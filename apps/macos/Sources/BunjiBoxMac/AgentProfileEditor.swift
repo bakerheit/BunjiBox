@@ -111,7 +111,8 @@ struct AgentProfileEditor: View {
                         AvatarView(avatar: BotAvatar(shape: shape, color: avatar.color, image: nil), size: 44)
                             .padding(6).background(selection(avatar.image == nil && avatar.shape == shape))
                     }
-                    .buttonStyle(.plain).accessibilityLabel("\(shape.capitalized) shape")
+                    .buttonStyle(.plain).accessibilityLabel("\(DistinctAvatarShapes.label(shape)) shape")
+                    .help(DistinctAvatarShapes.label(shape))
                     .accessibilityAddTraits(avatar.image == nil && avatar.shape == shape ? [.isSelected] : [])
                 }
             }

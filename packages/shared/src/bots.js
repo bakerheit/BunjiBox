@@ -1,8 +1,9 @@
 import { normalizeMode, normalizeRuntime, runtimes, effortSteps } from './runtimes.js'
+import { distinctAvatarShapes } from './avatars.js'
 
 export const colors = ['cyan', 'blue', 'magenta', 'green', 'yellow', 'red', 'white']
 export const colorValues = { cyan: '#00ad9c', blue: '#087ee7', magenta: '#8247e5', green: '#00a56a', yellow: '#ff9c00', red: '#ee1734', white: '#ffffff' }
-export const shapes = { hexagon: '⬡', circle: '●', square: '■', diamond: '◆', triangle: '▲', pebble: '●', pill: '▬', cloud: '☁', drop: '♦' }
+export const shapes = { hexagon: '⬡', circle: '●', square: '■', diamond: '◆', triangle: '▲', pebble: '●', pill: '▬', cloud: '☁', drop: '♦', ...Object.fromEntries(distinctAvatarShapes.map(shape => [shape.name, shape.glyph])) }
 const fields = ['name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer']
 export const validId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id)
 const object = value => value && typeof value === 'object' && !Array.isArray(value)
