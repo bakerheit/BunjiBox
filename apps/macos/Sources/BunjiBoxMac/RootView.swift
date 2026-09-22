@@ -148,7 +148,7 @@ private struct ChatTurn: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("\(RuntimeCatalog.modelLabel(provider: request.provider, model: request.model)) · \(request.effort) · \(request.resolvedModeLabel)")
+                Text("\(RuntimeCatalog.modelLabel(provider: request.provider, model: request.model)) · \(request.effort)")
                     .font(.caption).foregroundStyle(.secondary)
                 if request.isRunning {
                     HStack { ProgressView().controlSize(.small); Text("Working…") }.foregroundStyle(.secondary)
@@ -217,12 +217,6 @@ private struct ComposerView: View {
 
             HStack(spacing: 10) {
                 if let bot = store.selectedBot {
-                    Picker("Run mode", selection: Binding(get: { bot.mode }, set: { store.setMode($0) })) {
-                        ForEach(RuntimeCatalog.modes(for: bot.provider), id: \.self) { Text($0.capitalized).tag($0) }
-                    }
-                    .pickerStyle(.segmented).labelsHidden()
-                    .frame(width: RuntimeCatalog.modes(for: bot.provider).count > 1 ? 190 : 70)
-
                     Menu(RuntimeCatalog.modelLabel(provider: bot.provider, model: bot.model)) {
                         ForEach(RuntimeCatalog.models[bot.provider] ?? [], id: \.id) { item in
                             Button(item.label) { store.setModel(item.id) }
@@ -337,7 +331,6 @@ private struct AgentSettingsInspector: View {
                     LabeledContent("Name", value: bot.name)
                     LabeledContent("Provider", value: RuntimeCatalog.labels[bot.provider] ?? bot.provider)
                     LabeledContent("Model", value: RuntimeCatalog.modelLabel(provider: bot.provider, model: bot.model))
-                    LabeledContent("Mode", value: bot.mode.capitalized)
                 }
                 Section("Computer") {
                     LabeledContent("Access", value: bot.computer.scope == "machine" ? "This Mac · full access" : bot.computer.scope == "folder" ? "Selected folder" : "Not connected")

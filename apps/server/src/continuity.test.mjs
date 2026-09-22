@@ -61,6 +61,16 @@ test('OpenRouter requests pass through shared chat persistence and the provider 
   assert.match(observedHooks.messages[0].content, /assigned assistant identity/)
   assert.equal(observedHooks.messages[1].content, 'Hello')
 })
+test('missing mode always uses automatic routing instead of a saved manual choice', async t => {
+  let observed
+  const f = await fixture(t, async options => { observed = options; return { ok: true, text: 'Created it.' } })
+  f.bots.patch('bunjibox', { mode: 'chat' })
+  f.service.start('bunjibox', { id: 'implicit-auto', prompt: 'Create a spreadsheet in the workspace', provider: 'codex', model: 'gpt-5.6-luna', effort: 'low' })
+  const request = await done(f.chats, 'implicit-auto')
+  assert.equal(request.requestedMode, 'auto')
+  assert.equal(request.mode, 'agent')
+  assert.equal(observed.mode, 'agent')
+})
 test('Chat mode persists its boundary and never receives Bunji or machine tools', async t => {
   let observed
   const f = await fixture(t, async (options, hooks) => { observed = { options, hooks }; return { ok: true, text: 'Hi from Chat', usage: { inputTokens: 5, outputTokens: 4, totalTokens: 9 } } })

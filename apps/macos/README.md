@@ -1,7 +1,7 @@
 # BunjiBox for macOS
 
 Native SwiftUI client for the shared Bunji workspace. It talks to the same local
-API as the web app and `bunji`, so agents, modes, messages, activity, and token
+API as the web app and `bunji`, so agents, models, messages, activity, and token
 usage stay synchronized.
 
 ```bash

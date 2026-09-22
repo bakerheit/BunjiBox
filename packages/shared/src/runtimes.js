@@ -40,6 +40,10 @@ export function supportedModes(provider) {
   return runtimes[provider]?.modes || []
 }
 
+export function automaticMode(provider) {
+  return supportedModes(provider).includes('auto') ? 'auto' : 'chat'
+}
+
 export function modeDisplay(requestedMode, resolvedMode = requestedMode) {
   const resolved = resolvedMode === 'agent' ? 'Agent' : 'Chat'
   return requestedMode === 'auto' ? `Auto → ${resolved}` : resolved

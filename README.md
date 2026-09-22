@@ -99,7 +99,7 @@ The Vite server proxies `/api` to the local-only bridge on `127.0.0.1:4318`.
 
 The native SwiftUI client shares Bunji's local API and workspace with the web
 app and CLI. It includes the agent sidebar, continuous chat, Markdown replies,
-tool activity, honest token usage, Auto/Chat/Agent controls, model selection,
+tool activity, honest token usage, automatic tool routing, model selection,
 and the effort slider without embedding a WebView.
 
 ```bash

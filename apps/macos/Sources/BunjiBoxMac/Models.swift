@@ -58,10 +58,6 @@ struct ChatRequest: Decodable, Identifiable, Sendable {
     let omittedTurns: Int?
 
     var isRunning: Bool { status == "running" }
-    var resolvedModeLabel: String {
-        let resolved = mode == "agent" ? "Agent" : "Chat"
-        return requestedMode == "auto" ? "Auto → \(resolved)" : resolved
-    }
 }
 
 struct RunActivity: Decodable, Identifiable, Sendable {
@@ -153,8 +149,8 @@ enum RuntimeCatalog {
         "ollama": [("gemma3:1b", "Gemma3 1B · Raspberry Pi"), ("qwen3:1.7b", "Qwen3 1.7B · Raspberry Pi")],
     ]
 
-    static func modes(for provider: String) -> [String] {
-        ["codex", "claude"].contains(provider) ? ["auto", "chat", "agent"] : ["chat"]
+    static func automaticMode(for provider: String) -> String {
+        ["codex", "claude"].contains(provider) ? "auto" : "chat"
     }
 
     static func efforts(for provider: String, model: String) -> [String] {

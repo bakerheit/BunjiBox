@@ -33,7 +33,7 @@ struct BunjiAPI: Sendable {
         let payload = SendMessageRequest(
             id: "run-\(UUID().uuidString.lowercased())", prompt: prompt,
             provider: bot.provider, model: bot.model, effort: bot.effort,
-            mode: bot.mode, memoryWrite: bot.mode != "chat"
+            mode: RuntimeCatalog.automaticMode(for: bot.provider), memoryWrite: true
         )
         let response: SendMessageResponse = try await request(
             "/api/bots/\(segment(bot.id))/messages", method: "POST", body: payload

@@ -1,7 +1,7 @@
 import { runProvider, providerCommand, computerExecution } from './runtime.mjs'
 import { buildContext } from './context.mjs'
 import { publishResponseFiles } from './file-history.mjs'
-import { normalizeMode, supportedModes } from '@bunji/shared/runtimes'
+import { automaticMode, normalizeMode, supportedModes } from '@bunji/shared/runtimes'
 import { attributeProviderUsage, combineUsageBreakdowns, createUsageBreakdown } from './usage-attribution.mjs'
 import { AUTO_CHAT_INSTRUCTION, parseAgentHandoff, routeAutoPrompt } from './mode-router.mjs'
 import { codexHistoryKey } from './codex-session-store.mjs'
@@ -38,7 +38,7 @@ export function createChatService({ bots, chats, memoryDirectory, memory, files,
       if (deleting.has(botId)) throw fail('This bot is being deleted. Try another bot.', 409)
       const bot = botFor(botId)
       const { id, prompt, provider = bot.provider, model = bot.model, effort = bot.effort } = body || {}
-      const preference = body?.mode === undefined && provider === bot.provider ? bot.mode : normalizeMode(provider, body?.mode ?? bot.mode)
+      const preference = normalizeMode(provider, body?.mode ?? automaticMode(provider))
       if (!supportedModes(provider).includes(preference)) throw fail('That mode is not supported by this provider.')
       const plan = preference === 'auto' ? routeAutoPrompt(provider, prompt) : { mode: preference, modelCheck: false,
         reason: preference === 'agent' ? 'Agent mode was selected.' : 'Chat mode was selected.' }

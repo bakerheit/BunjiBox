@@ -105,12 +105,6 @@ final class WorkspaceStore: ObservableObject {
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func setMode(_ mode: String) {
-        guard let index = bots.firstIndex(where: { $0.id == selectedBotID }) else { return }
-        bots[index].mode = mode
-        Task { await updateSelected(BotPatch(mode: mode)) }
-    }
-
     func setModel(_ model: String) {
         guard let index = bots.firstIndex(where: { $0.id == selectedBotID }) else { return }
         let bot = bots[index]
