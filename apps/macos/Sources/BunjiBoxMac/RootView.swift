@@ -62,12 +62,14 @@ private struct AgentSidebar: View {
                                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 3)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
                             Button("Edit profile…") { store.editingBot = bot }
                         }
-                        .padding(.vertical, 3)
                         .listRowBackground(store.selectedBotID == bot.id ? Color.accentColor.opacity(0.18) : Color.clear)
                     }
                 }

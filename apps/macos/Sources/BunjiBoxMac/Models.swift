@@ -126,6 +126,25 @@ struct SendMessageRequest: Encodable, Sendable {
 struct SendMessageResponse: Decodable, Sendable { let request: ChatRequest }
 struct CancelResponse: Decodable, Sendable { let request: ChatRequest }
 
+struct AvatarGenerationRequest: Encodable, Sendable {
+    let id: String
+    let prompt: String
+}
+
+struct AvatarGenerationResponse: Decodable, Sendable {
+    let generation: AvatarGeneration
+}
+
+struct AvatarGeneration: Decodable, Sendable {
+    enum Status: String, Decodable, Sendable {
+        case running, complete, failed, cancelled
+    }
+    let id: String
+    let status: Status
+    let image: String?
+    let error: String?
+}
+
 struct CreateBotRequest: Encodable, Sendable {
     let id: String
     let name: String

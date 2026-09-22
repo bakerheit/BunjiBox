@@ -1,9 +1,11 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
+import AvatarGeneration from './AvatarGeneration'
+import { normalizeAvatarImage } from './avatar-generation'
 import './AvatarPicker.css'
 
 const AvatarContext = createContext(null)
 const DEFAULT_AVATAR = { shape: 'hexagon', color: '#777777', image: null }
-const TABS = ['Bot', 'Generated', 'Upload']
+const TABS = ['Avatar', 'Generate', 'Upload']
 const SHAPES = [
   { name: 'diamond', path: 'M 50 4 L 96 50 L 50 96 L 4 50 Z' },
   { name: 'circle', path: 'M 50 8 C 74 8 92 26 92 50 C 92 74 74 92 50 92 C 26 92 8 74 8 50 C 8 26 26 8 50 8 Z' },
@@ -91,7 +93,7 @@ function AvatarEditorControls({ tone, inline }) {
   const uploadRequest = useRef(0)
   const fileInput = useRef(null)
   const [expanded, setExpanded] = useState(true)
-  const [tab, setTab] = useState('Bot')
+  const [tab, setTab] = useState('Avatar')
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const value = avatarValue(values[tone])
@@ -123,23 +125,22 @@ function AvatarEditorControls({ tone, inline }) {
     }
     setError('')
     setUploading(true)
-    let bitmap
     try {
-      bitmap = await createImageBitmap(file)
+      const image = await normalizeAvatarImage(file)
       if (request !== uploadRequest.current) return
-      const canvas = document.createElement('canvas')
-      canvas.width = canvas.height = 256
-      const context = canvas.getContext('2d')
-      if (!context) throw new Error('Image resizing is unavailable')
-      const edge = Math.min(bitmap.width, bitmap.height)
-      context.drawImage(bitmap, (bitmap.width - edge) / 2, (bitmap.height - edge) / 2, edge, edge, 0, 0, 256, 256)
-      update({ image: canvas.toDataURL('image/webp', 0.85) })
+      update({ image })
     } catch {
       if (request === uploadRequest.current) setError('This image could not be opened. Try another PNG, JPG, or WebP.')
     } finally {
-      bitmap?.close()
       if (request === uploadRequest.current) setUploading(false)
     }
+  }
+
+  const selectTab = name => {
+    uploadRequest.current += 1
+    setUploading(false)
+    setError('')
+    setTab(name)
   }
 
   const selectShape = index => update({ shape: SHAPES[index].name, image: null })
@@ -160,14 +161,14 @@ function AvatarEditorControls({ tone, inline }) {
             aria-selected={tab === name}
             aria-controls={`${id}-panel-${name}`}
             tabIndex={tab === name ? 0 : -1}
-            onClick={() => setTab(name)}
-            onKeyDown={event => moveChoice(event, index, TABS.length, next => setTab(TABS[next]))}
+            onClick={() => selectTab(name)}
+            onKeyDown={event => moveChoice(event, index, TABS.length, next => selectTab(TABS[next]))}
           >{name}</button>)}
         </div>
-        <button className="bb-avatar-reset" type="button" aria-label="Reset avatar to gray hexagon" onClick={() => { if (update(DEFAULT_AVATAR)) setTab('Bot') }}>Reset</button>
+        <button className="bb-avatar-reset" type="button" aria-label="Reset avatar to gray hexagon" onClick={() => { if (update(DEFAULT_AVATAR)) selectTab('Avatar') }}>Reset</button>
       </div>
 
-      <div className="bb-avatar-bot-panel" role="tabpanel" id={`${id}-panel-Bot`} aria-labelledby={`${id}-tab-Bot`} hidden={tab !== 'Bot'}>
+      <div className="bb-avatar-bot-panel" role="tabpanel" id={`${id}-panel-Avatar`} aria-labelledby={`${id}-tab-Avatar`} hidden={tab !== 'Avatar'}>
         <div className="bb-avatar-shapes" role="radiogroup" aria-label="Bot shape">
           {SHAPES.map((shape, index) => <button
             key={shape.name}
@@ -197,12 +198,8 @@ function AvatarEditorControls({ tone, inline }) {
         </div>
       </div>
 
-      <div className="bb-avatar-media-panel" role="tabpanel" id={`${id}-panel-Generated`} aria-labelledby={`${id}-tab-Generated`} hidden={tab !== 'Generated'}>
-        <button type="button" className="bb-avatar-generated" aria-label="Use generated teal ceramic bot" aria-pressed={value.image === '/teal-bot.png'} onClick={() => update({ image: '/teal-bot.png' })}>
-          <img src="/teal-bot.png" alt="Teal ceramic bot with soft studio lighting" width="160" height="160" />
-          <span>{value.image === '/teal-bot.png' ? 'Using this avatar' : 'Use this avatar'}<span aria-hidden="true">{value.image === '/teal-bot.png' ? '✓' : '↗'}</span></span>
-        </button>
-        <div className="bb-avatar-media-copy"><p className="bb-avatar-media-title">A little more personality.</p><p>Created with imagegen. Pick this starter, or ask Bingo to generate a custom image and upload it here.</p><p className="bb-avatar-limitation">In-app generation is not connected yet.</p></div>
+      <div className="bb-avatar-media-panel" role="tabpanel" id={`${id}-panel-Generate`} aria-labelledby={`${id}-tab-Generate`} hidden={tab !== 'Generate'}>
+        {tab === 'Generate' && <AvatarGeneration id={id} onUse={image => update({ image })} />}
       </div>
 
       <div className="bb-avatar-media-panel" role="tabpanel" id={`${id}-panel-Upload`} aria-labelledby={`${id}-tab-Upload`} hidden={tab !== 'Upload'}>
@@ -225,7 +222,7 @@ function AvatarEditorControls({ tone, inline }) {
     <button type="button" className="bb-avatar-launcher" onClick={() => dialog.current?.showModal()} aria-haspopup="dialog" aria-label="Customize bot avatar">
       <BotAvatar value={value} /><span>Customize avatar</span><span className="bb-avatar-launcher-arrow" aria-hidden="true">↗</span>
     </button>
-    <dialog ref={dialog} className="bb-avatar-dialog" aria-labelledby={`${id}-title`} onClick={event => { if (event.target === event.currentTarget) dialog.current.close() }}>
+    <dialog ref={dialog} className="bb-avatar-dialog" aria-labelledby={`${id}-title`} onClose={() => selectTab('Avatar')} onClick={event => { if (event.target === event.currentTarget) dialog.current.close() }}>
       <div className="bb-avatar-dialog-content">
         <header className="bb-avatar-dialog-header"><h2 id={`${id}-title`}>Make it yours</h2><button type="button" autoFocus aria-label="Close avatar settings" onClick={() => dialog.current.close()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button></header>
         {builder}

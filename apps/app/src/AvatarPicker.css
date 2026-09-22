@@ -172,25 +172,27 @@
 }
 
 .bb-avatar-builder [hidden] { display: none !important; }
-.bb-avatar-generated {
-  width: min(100%, 196px);
-  padding: 8px;
-  border-radius: 23px;
-  background: #232524;
-  box-shadow: inset 0 0 0 1px #363838;
-  transition: box-shadow 140ms ease, background 140ms ease;
-}
-
-.bb-avatar-generated[aria-pressed="true"] { box-shadow: inset 0 0 0 1.5px #888b89; }
-.bb-avatar-generated > img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 16px; }
-.bb-avatar-generated > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 5px 5px; font-size: 12px; }
-.bb-avatar-generated > span > span { color: #a6bdb5; }
+.bb-avatar-generation { display: flex; width: 100%; min-width: 0; flex-direction: column; gap: 12px; }
+.bb-avatar-generation .bb-avatar-media-copy { align-self: center; margin-bottom: 4px; }
+.bb-avatar-generation label { font-size: 13px; color: #e3e5e4; }
+.bb-avatar-generation textarea { box-sizing: border-box; width: 100%; min-height: 96px; resize: vertical; padding: 12px; border: 1px solid #494c4a; border-radius: 12px; background: #111312; color: #ededed; font: inherit; font-size: 13px; line-height: 1.5; }
+.bb-avatar-generation textarea:focus-visible { outline: 2px solid #e7e7e7; outline-offset: 2px; }
+.bb-avatar-generation textarea:disabled { opacity: .65; }
+.bb-avatar-generation-status { margin: 0; font-size: 13px; line-height: 1.5; color: #cbd3cf; }
+.bb-avatar-generation-status:empty { display: none; }
+.bb-avatar-generated-preview { align-self: center; width: min(100%, 256px); height: auto; aspect-ratio: 1; border-radius: 20px; }
+.bb-avatar-generation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bb-avatar-generation-actions button { min-height: 44px; padding: 10px 16px; border-radius: 12px; background: #303532; font-size: 13px; }
+.bb-avatar-generation-actions .bb-avatar-use-button { background: #d7eee0; color: #102019; }
+.bb-avatar-generation-actions .bb-avatar-cancel-button { background: #242725; }
+.bb-avatar-generation .bb-avatar-error { margin: 0; overflow-wrap: anywhere; }
+.bb-avatar-generation .bb-avatar-error p { margin: 0; }
+.bb-avatar-generation .bb-avatar-error p + p { margin-top: 8px; }
 .bb-avatar-media-copy { max-width: 330px; text-align: center; }
 .bb-avatar-media-copy p,
 .bb-avatar-upload-help { margin: 0; color: #aaaead; font-size: 12px; line-height: 1.65; text-wrap: pretty; }
 .bb-avatar-media-copy p + p { margin-top: 8px; }
 .bb-avatar-media-copy .bb-avatar-media-title { color: #e3e5e4; font-size: 14px; font-weight: 500; }
-.bb-avatar-media-copy .bb-avatar-limitation { color: #909694; font-size: 11px; }
 
 .bb-avatar-upload-button {
   display: flex;
@@ -259,7 +261,7 @@
   .bb-avatar-builder .bb-avatar-reset:hover { color: #fff; background: #2b2c2b; }
   .bb-avatar-shape:hover { background: #ffffff06; }
   .bb-avatar-color:hover > span { transform: scale(1.08); }
-  .bb-avatar-generated:hover { background: #2a2e2b; }
+  .bb-avatar-generation-actions button:hover { filter: brightness(1.12); }
   .bb-avatar-upload-button:hover { background: #282b29; }
   .bb-avatar-launcher:hover { background: #222423; }
   .bb-avatar-dialog-header button:hover { background: #2a2d2b; }

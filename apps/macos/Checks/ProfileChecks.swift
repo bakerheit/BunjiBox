@@ -33,7 +33,7 @@ struct ProfileChecks {
         do {
             _ = try await api.patch(botID: id, changes: BotPatch(name: String(repeating: "x", count: 61)))
             preconditionFailure("Invalid name accepted")
-        } catch BunjiAPIError.server {}
+        } catch BunjiAPIError.http(let status, _) { precondition(status == 400) }
         let afterFailure = try await secondClient.bots().bots.first { $0.id == id }!
         precondition(afterFailure == reset, "Rejected saves must not change persisted settings")
         print("Native profile upload, resize, persistence, image removal, partial edits, and rejection checks passed.")

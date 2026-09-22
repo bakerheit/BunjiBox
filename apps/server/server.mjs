@@ -13,6 +13,8 @@ import { openFileStore } from '@bunji/core/file-store'
 import { createFileRoutes } from './src/files.mjs'
 import { recoverFileHistory } from '@bunji/core/file-history'
 import { createProviderRoutes } from './src/providers.mjs'
+import { createAvatarGenerations } from '@bunji/core/avatar-generation'
+import { createAvatarGenerationRoutes } from './src/avatar-generations.mjs'
 
 const PORT = Number(process.env.BUNJI_API_PORT || 4318)
 // Coordinate by workspace, not only by port. Two service ports must not recover
@@ -32,6 +34,8 @@ const handleFiles = createFileRoutes({ service: chatService, files: fileStore })
 const handleBots = createBotRoutes(botStore, chatService)
 const handleContinuity = createContinuityRoutes({ service: chatService, chats: chatStore, memory: memoryStore })
 const handleProviders = createProviderRoutes()
+const avatarGenerations = createAvatarGenerations()
+const handleAvatarGenerations = createAvatarGenerationRoutes(avatarGenerations)
 await Promise.all(botStore.list().bots.map(bot => recoverFileHistory({ bot, chats: chatStore, files: fileStore })))
 
 function sendJson(response, status, body) {
@@ -40,6 +44,7 @@ function sendJson(response, status, body) {
 }
 
 const server = http.createServer(async (request, response) => {
+  if (await handleAvatarGenerations(request, response)) return
   if (await handleFiles(request, response)) return
   if (await handleContinuity(request, response)) return
   if (await handleBots(request, response)) return
@@ -119,6 +124,7 @@ async function shutdown() {
   stopping = true
   server.close()
   await chatService.close()
+  await avatarGenerations.close()
   await providerRunner.close()
   fileStore.close(); chatStore.close(); botStore.close()
   serviceLease.release()

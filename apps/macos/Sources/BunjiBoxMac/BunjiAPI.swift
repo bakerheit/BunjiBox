@@ -3,11 +3,13 @@ import Foundation
 enum BunjiAPIError: LocalizedError {
     case invalidResponse
     case server(String)
+    case http(status: Int, message: String)
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse: "Bunji returned an unreadable response."
         case .server(let message): message
+        case .http(_, let message): message
         }
     }
 }
@@ -52,6 +54,25 @@ struct BunjiAPI: Sendable {
         try await request("/api/bots/\(segment(botID))", method: "PATCH", body: changes)
     }
 
+    func createAvatarGeneration(_ payload: AvatarGenerationRequest) async throws -> AvatarGeneration {
+        let response: AvatarGenerationResponse = try await request(
+            "/api/avatar-generations", method: "POST", body: payload
+        )
+        return response.generation
+    }
+
+    func avatarGeneration(id: String) async throws -> AvatarGeneration {
+        let response: AvatarGenerationResponse = try await request("/api/avatar-generations/\(segment(id))")
+        return response.generation
+    }
+
+    func cancelAvatarGeneration(id: String) async throws -> AvatarGeneration {
+        let response: AvatarGenerationResponse = try await request(
+            "/api/avatar-generations/\(segment(id))/cancel", method: "POST", body: EmptyBody()
+        )
+        return response.generation
+    }
+
     func createBot() async throws -> BotListResponse {
         let payload = CreateBotRequest(
             id: "bot-\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: ""))",
@@ -86,7 +107,7 @@ struct BunjiAPI: Sendable {
         guard let response = rawResponse as? HTTPURLResponse else { throw BunjiAPIError.invalidResponse }
         guard (200..<300).contains(response.statusCode) else {
             let message = (try? JSONDecoder().decode(ErrorResponse.self, from: data).error) ?? "Bunji request failed (HTTP \(response.statusCode))."
-            throw BunjiAPIError.server(message)
+            throw BunjiAPIError.http(status: response.statusCode, message: message)
         }
         do { return try JSONDecoder().decode(Response.self, from: data) }
         catch { throw BunjiAPIError.invalidResponse }

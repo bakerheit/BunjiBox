@@ -2,10 +2,11 @@ import AppKit
 import ImageIO
 
 enum AvatarImageError: LocalizedError {
-    case tooLarge, unreadable
+    case tooLarge, generatedTooLarge, unreadable
     var errorDescription: String? {
         switch self {
         case .tooLarge: "Choose an image up to 5 MB."
+        case .generatedTooLarge: "The generated picture exceeds the 20 MB limit. Try generating another picture."
         case .unreadable: "This picture could not be opened. Try another PNG, JPG, or WebP."
         }
     }
@@ -23,6 +24,26 @@ enum AvatarImageData {
     // Store the same portable data URL used by the web app, never a local file path.
     static func normalize(_ data: Data) throws -> String {
         guard data.count <= 5 * 1024 * 1024 else { throw AvatarImageError.tooLarge }
+        return try normalizeImage(data)
+    }
+
+    // Generated images have a larger input allowance; saved avatars keep the same size and format.
+    static func normalizeGenerated(_ dataURL: String) throws -> String {
+        let limit = 20 * 1024 * 1024
+        guard dataURL.utf8.count <= ((limit + 2) / 3) * 4 + 100 else {
+            throw AvatarImageError.generatedTooLarge
+        }
+        guard let comma = dataURL.firstIndex(of: ","),
+              dataURL[..<comma].hasPrefix("data:image/"),
+              dataURL[..<comma].hasSuffix(";base64"),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])) else {
+            throw AvatarImageError.unreadable
+        }
+        guard data.count <= limit else { throw AvatarImageError.generatedTooLarge }
+        return try normalizeImage(data)
+    }
+
+    private static func normalizeImage(_ data: Data) throws -> String {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,

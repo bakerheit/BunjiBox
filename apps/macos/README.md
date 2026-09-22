@@ -6,9 +6,22 @@ usage stay synchronized.
 
 Click an agent's name or avatar in the chat header, right-click it in the sidebar,
 or choose **Edit profile…** in Settings to edit its name, description, and avatar.
-Choose from the shared shapes/colors, use the starter picture, or upload a PNG,
-JPG, or WebP up to 5 MB. Changes save to the shared workspace; Cancel discards the
-draft. Uploaded pictures are center-cropped and resized to 256 × 256.
+The picture editor has **Avatar**, **Generate**, and **Upload** tabs. Pick a shape
+and color, describe a new picture for ChatGPT to generate, or upload a PNG, JPG,
+or WebP up to 5 MB. Generated pictures are previews until you choose **Use this
+picture** and **Save changes**. Changes save to the shared workspace; Cancel
+discards the draft. Pictures are center-cropped and resized to 256 × 256.
+
+Generation uses the local Codex app-server's native image tool with your signed-in
+ChatGPT account, not an API key or a starter-image collection. It uses your Codex
+usage allowance ([OpenAI documentation](https://learn.chatgpt.com/docs/image-generation)).
+Codex must be installed and support native image generation. The isolated image
+session disables shell and other agent tools; it does not use the agent's chat or
+memories. Long image generations have no total timeout. Retry reconnects to the
+same request after a network error; Cancel stops it. Unsaved previews expire after
+20 minutes or a Bunji service restart. Previously saved starter pictures still work.
+
+Click anywhere across an agent's sidebar row to open its conversation.
 
 ```bash
 npm run macos:build
