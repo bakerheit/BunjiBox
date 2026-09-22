@@ -2,9 +2,9 @@
 
 Normal saved-bot chat can now expose the existing guarded native MCP helper to
 Codex and Claude. Apple Notes and the disposable fixture are the only targets.
-Main validated real Notes capture, new-note creation, text insertion, and AX
-read-back; integrate its separate focused-first AX traversal fix alongside this
-change. This branch does not change the native executor or its target allowlist.
+Validated real Notes capture, new-note creation, text insertion, and AX read-back.
+Focused-first, breadth-first AX traversal prevents sidebars from consuming the
+editor's observation budget. No broader target support is claimed.
 
 ## Setup
 
@@ -63,9 +63,22 @@ swift build --package-path apps/macos
 
 The native runtime tests require the helper build for positive config tests;
 without it those tests skip explicitly. Saved-chat integration uses a stubbed
-provider and real command generation, not paid model calls or GUI input. Bridge
-tests use a fake helper. Main owns real app/chat UI QA, Notes smoke testing,
-provider end-to-end checks and any backend restart. No backend was restarted here.
+provider and real command generation. Bridge tests use a fake helper. Additionally,
+both signed-in Codex Luna and Claude Sonnet passed the live shared-chat-service
+fixture test: saved bot setting, automatic Agent routing, screenshot-only random
+code, native typing/save, independent native status verification, and stop:
+
+```sh
+node experiments/computer-use-native/chat-smoke.mjs --live
+node experiments/computer-use-native/chat-smoke.mjs --live --claude
+```
+
+These commands use subscription quota, keep bot/chat stores in memory and use an
+isolated temporary memory directory; they do not change saved user agents.
+Native Settings, target confirmation cancellation, avatar previews and neutral
+human/colored agent bubbles were checked in the running packaged app. The idle
+backend was restarted and the app rebuilt/reopened. Existing agent settings were
+preserved; native targets remain off until the user enables them.
 
 Remaining limits: no generic app support, continuous video, or background input
 guarantee. Native control is intentionally restricted to already-confirmed

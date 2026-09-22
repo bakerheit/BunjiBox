@@ -3,7 +3,7 @@ import SwiftUI
 struct NativeComputerSettings: View {
     @ObservedObject var store: WorkspaceStore
     let bot: Bot
-    @State private var pendingTarget: String?
+    @State private var pendingTarget: (botID: String, target: String)?
     @State private var machineConfirmation: Bot?
     @State private var savingAccess = false
     private var eligible: Bool {
@@ -35,8 +35,8 @@ struct NativeComputerSettings: View {
             }
         }
         Picker("Target", selection: Binding(get: { bot.nativeComputer ?? "off" }, set: { target in
-            if target == "off" { Task { await store.updateSelected(BotPatch(nativeComputer: "off")) } }
-            else { pendingTarget = target }
+            if target == "off" { saveTarget(botID: bot.id, target: "off") }
+            else { pendingTarget = (bot.id, target) }
         })) {
             Text("Off").tag("off")
             Text("Apple Notes").tag("com.apple.Notes").disabled(!eligible)
@@ -51,13 +51,22 @@ struct NativeComputerSettings: View {
         .confirmationDialog("Enable native control for this agent?", isPresented: Binding(get: { pendingTarget != nil }, set: { if !$0 { pendingTarget = nil } })) {
             Button("Enable native control") {
                 if let target = pendingTarget {
-                    Task { await store.updateSelected(BotPatch(nativeComputer: target)) }
+                    saveTarget(botID: target.botID, target: target.target)
                 }
                 pendingTarget = nil
             }
             Button("Cancel", role: .cancel) { pendingTarget = nil }
         } message: {
             Text("The agent can read and change the selected target during Agent chat. Take over pauses control; Stop ends the helper session. Turn this setting off to disable future turns. Cancel a running chat to end its helper.")
+        }
+    }
+
+    private func saveTarget(botID: String, target: String) {
+        Task {
+            do {
+                try await store.saveProfile(botID: botID, changes: BotPatch(nativeComputer: target))
+                store.errorMessage = nil
+            } catch { store.errorMessage = error.localizedDescription }
         }
     }
 }

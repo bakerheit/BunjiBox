@@ -1,6 +1,7 @@
 # Bunji Native Lab
 
-An opt-in native computer-use prototype. **Not wired into normal BunjiBox chats.**
+The native computer-use helper. Normal saved-bot chat integration is now available
+through an explicit native target setting; see [setup](../../docs/native-computer-use.md).
 The design keeps the model bridge, native executor, and visible preview separate.
 No HTTP port or Wi-Fi control endpoint is exposed.
 
@@ -26,7 +27,7 @@ The private stdio protocol exposes `status`, `focus`, `observe`, `act`, and `sto
 Use the [MCP bridge](../computer-use-native-bridge/README.md) for a model connection.
 The launcher fixes the target; the model cannot switch apps, grant permissions, or
 resume after takeover. Only `fixture` and `com.apple.Notes` are accepted in this
-milestone. The external Notes adapter is **compiled, not live-validated**.
+milestone. The external Notes adapter passed a live create/type/read-back test.
 
 Actions: image-pixel click, indexed accessibility press, plain text, bounded scroll,
 and a small key allowlist. In the fixture, actions use native AppKit controls and
@@ -97,7 +98,20 @@ no user CLI configuration was changed. See the
 Authentication was checked: Codex uses ChatGPT; Claude uses claude.ai Max. No API-key
 or Bedrock/Vertex environment override was present in those test processes.
 
-Still unverified: Notes-specific AX behavior, real external
-ScreenCaptureKit capture, event injection, OS permission/relaunch behavior, and
+Live Notes validation (explicitly creates one new test note):
+
+```sh
+BUNJI_NATIVE_EXPERIMENT=1 node experiments/computer-use-native/notes-smoke.mjs --create-test-note
+```
+
+Passed on 2026-09-21: real ScreenCaptureKit screenshot, Cmd+N, verify a blank
+editor, native Unicode typing, and independent Accessibility text read-back.
+The test never selects all or replaces existing note contents. One labeled test
+note remains; it is not deleted automatically. OS permissions were already granted.
+The first test exposed a depth-first scan budget consumed by a long sidebar;
+focused-first, breadth-first traversal now keeps the editor in bounded evidence.
+
+Still unverified: broader Notes workflows, OS permission/relaunch behavior, and
 multi-monitor cursor placement. Generic native app support, continuous video,
-browser controls, and integration into Bunji's chat runtime are later work.
+and browser controls are later work. Codex and Claude shared-chat-service fixture
+tests passed; see `chat-smoke.mjs --live` (add `--claude` for Claude).

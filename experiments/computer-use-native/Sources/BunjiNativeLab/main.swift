@@ -214,22 +214,31 @@ final class NativeLab: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func sameBounds(_ a: CGRect, _ b: CGRect) -> Bool {
         abs(a.minX - b.minX) < 1 && abs(a.minY - b.minY) < 1 && abs(a.width - b.width) < 1 && abs(a.height - b.height) < 1
     }
-    func snapshotAX(_ root: AXUIElement) -> [[String: Any]] {
+    func snapshotAX(_ root: AXUIElement, pid: pid_t, bounds: CGRect) -> [[String: Any]] {
         elements.removeAll()
         var result: [[String: Any]] = []; var visited = Set<CFHashCode>(); let deadline = now + 0.75
-        func visit(_ e: AXUIElement, depth: Int) {
-            guard result.count < 60, depth < 9, now < deadline, visited.insert(CFHash(e)).inserted else { return }
+        // A long sidebar must not consume the entire budget before the editor.
+        // Prefer the focused element, then traverse breadth-first across panes.
+        var queue: [(AXUIElement, Int)] = [(root, 0)]
+        let appRoot = AXUIElementCreateApplication(pid)
+        if let focused = axValue(appRoot, kAXFocusedUIElementAttribute), CFGetTypeID(focused) == AXUIElementGetTypeID() {
+            let element = unsafeDowncast(focused, to: AXUIElement.self)
+            if let elementBounds = axBounds(element), bounds.contains(elementBounds) { queue.insert((element, 0), at: 0) }
+        }
+        var offset = 0
+        while offset < queue.count && result.count < 60 && now < deadline {
+            let (e, depth) = queue[offset]; offset += 1
+            guard depth < 9, visited.insert(CFHash(e)).inserted else { continue }
             let role = axValue(e, kAXRoleAttribute) as? String ?? "unknown"
             let subrole = axValue(e, kAXSubroleAttribute) as? String ?? ""
-            if subrole == kAXSecureTextFieldSubrole { return }
+            if subrole == kAXSecureTextFieldSubrole { continue }
             let id = "e\(result.count)"; elements[id] = e
             let label = axValue(e, kAXTitleAttribute) as? String ?? axValue(e, kAXDescriptionAttribute) as? String ?? ""
             let value = axValue(e, kAXValueAttribute) as? String ?? ""
             result.append(["id": id, "role": role, "label": String(label.prefix(160)), "value": String(value.prefix(300))])
             let children = axValue(e, kAXChildrenAttribute) as? [AXUIElement] ?? []
-            for child in children.prefix(60) { visit(child, depth: depth + 1) }
+            for child in children.prefix(min(60, max(0, 360 - queue.count))) { queue.append((child, depth + 1)) }
         }
-        visit(root, depth: 0)
         return result
     }
     func encodeImage(_ image: CGImage) throws -> (Data, NSImage) {
@@ -268,7 +277,7 @@ final class NativeLab: NSObject, NSApplicationDelegate, NSWindowDelegate {
             config.showsCursor = false; config.ignoreShadowsSingleWindow = true
             image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: selected), configuration: config)
             guard guardState.running, generation == guardState.generation, !IsSecureEventInputEnabled(), let currentBounds = axBounds(try focusedWindow(running)), sameBounds(bounds, currentBounds) else { throw LabError("Window moved or session changed during capture. Observe again.") }
-            evidence = snapshotAX(axWindow)
+            evidence = snapshotAX(axWindow, pid: running.processIdentifier, bounds: bounds)
             snapshotBounds = bounds; snapshotWindow = selected.windowID; snapshotPID = running.processIdentifier
             observedAXWindow = axWindow
         }

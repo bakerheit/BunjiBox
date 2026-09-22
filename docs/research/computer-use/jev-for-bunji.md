@@ -3,6 +3,10 @@
 Reviewed 2026-09-21 against the official docs. No API key was collected, no credits
 were spent, and no user conversations or app contents were sent to TypeSafe.
 
+Follow-up: [Hyper Computer Use research](hyper-computer-use.md) now includes three
+authorized synthetic live API checks. The original proposal below predates those
+checks; no real app contents were used in them.
+
 ## Fit
 
 Jev should be an optional decision service, not another chat-model dropdown item.

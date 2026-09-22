@@ -1,7 +1,9 @@
 # Jev-assisted Hyper Computer Use: bounded research
 
-Reviewed 2026-09-21. Research only; no app wiring, native actions, credential
-inspection, or paid API requests. Builds on [the existing proposal](jev-for-bunji.md).
+Reviewed 2026-09-21. Research only; no app wiring or native actions.
+The research agent used mocks; the parent later ran three explicitly authorized
+synthetic API calls using a temporary in-memory credential. Builds on
+[the existing proposal](jev-for-bunji.md).
 “Hyper Computer Use” is a proposed Bunji feature name here, not a verified TypeSafe
 product or a measured speed claim.
 
@@ -99,6 +101,23 @@ distributions, default no-network/no-env-read behavior, mocked live success and
 budgets, missing key, redacted HTTP/transport/parse failures, streamed size limits,
 timeouts before headers and during body reads, and separate usage fields. Mock
 responses prove adapter behavior only, not service compatibility or model quality.
+
+## Live API smoke results
+
+Three synthetic requests passed against resolved model `jev-1.13.0`:
+
+| Case | Result | Latency | Input | Output |
+| --- | --- | --- | --- | --- |
+| Save draft | Selected the correct candidate | 515 ms | 476 | 41 |
+| Duplicate Save controls | Abstained | 359 ms | 474 | 40 |
+| Do not press Delete; wait | Abstained | 157 ms | 426 | 32 |
+
+Total: 1,376 input and 113 output tokens. Cache-read and dollar cost are unavailable.
+No retries, screenshots, Notes content, or real user conversations were sent.
+The key was received through non-echoing process input and discarded on process exit;
+it is not a project file or saved Bunji credential. These three hand-picked cases
+prove API compatibility only, not production reliability, calibrated thresholds,
+or an improvement over the existing model. Broader held-out evaluation remains.
 
 ## Future experimental Settings toggle
 
