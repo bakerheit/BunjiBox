@@ -3,6 +3,17 @@ import { isAbsolute } from 'node:path'
 import { TextDecoder } from 'node:util'
 
 const methods = new Set(['status', 'focus', 'observe', 'act', 'stop'])
+const osEnvironmentKeys = new Set(['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', '__CF_USER_TEXT_ENCODING'])
+export function validateTarget(target) {
+  if (target !== 'fixture' && target !== 'com.apple.Notes') throw new Error('Launcher target must be fixture or com.apple.Notes')
+  return target
+}
+
+function childEnvironment(env) {
+  const allowed = Object.entries(env).filter(([key, value]) =>
+    typeof value === 'string' && (osEnvironmentKeys.has(key) || key.startsWith('LC_')))
+  return { ...Object.fromEntries(allowed), BUNJI_NATIVE_EXPERIMENT: '1' }
+}
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 function validateOptions({ timeoutMs = 15_000, maxLineBytes = 16 * 1024 * 1024, maxInflight = 16, killGraceMs = 250 } = {}) {
   const options = { timeoutMs, maxLineBytes, maxInflight, killGraceMs }
@@ -159,10 +170,10 @@ export function launchNativeClient({ helper, target = 'fixture', env = process.e
   // Check the actual parent environment; a caller-supplied env cannot grant access.
   if (process.env.BUNJI_NATIVE_EXPERIMENT !== '1') throw new Error('Parent must set BUNJI_NATIVE_EXPERIMENT=1')
   if (typeof helper !== 'string' || !isAbsolute(helper) || helper.includes('\0')) throw new Error('--helper must be an absolute executable path')
-  if (typeof target !== 'string' || !target || target.length > 512 || target.includes('\0')) throw new Error('Invalid launcher target')
+  validateTarget(target)
   validateOptions(options)
   const child = spawnImpl(helper, ['--stdio', '--target', target], {
-    env: { ...env, BUNJI_NATIVE_EXPERIMENT: '1' }, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
+    env: childEnvironment(env), stdio: ['pipe', 'pipe', 'pipe'], shell: false,
   })
   return new NativeChildClient(child, options)
 }

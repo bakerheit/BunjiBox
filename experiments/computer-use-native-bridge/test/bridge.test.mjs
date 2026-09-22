@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { EventEmitter, once } from 'node:events'
 import { PassThrough, Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { NativeChildClient, launchNativeClient } from '../child-client.mjs'
 import { createNativeServer, parseLauncherArgs } from '../server.mjs'
@@ -31,10 +31,14 @@ function unit(t, options = {}) {
   t.after(() => client.close())
   return { child, client }
 }
+// Explicit test-only injection after the production launcher's env allowlist.
+const spawnFakeMode = mode => (file, args, options) => spawn(file, args, {
+  ...options, env: { ...options.env, ...(mode ? { FAKE_NATIVE_MODE: mode } : {}) },
+})
 async function connected(t, mode, options = {}) {
-  const native = launchNativeClient({ helper, target: 'fixture', env: { ...process.env, FAKE_NATIVE_MODE: mode ?? '' }, timeoutMs: 1000, killGraceMs: 20, ...options })
+  const native = launchNativeClient({ helper, target: 'fixture', spawnImpl: spawnFakeMode(mode), timeoutMs: 1000, killGraceMs: 20, ...options })
   t.after(() => native.close())
-  const server = createNativeServer({ client: native })
+  const server = createNativeServer({ client: native, target: options.target ?? 'fixture' })
   const client = new Client({ name: 'bridge-test', version: '1' })
   const [a, b] = InMemoryTransport.createLinkedPair()
   await server.connect(b)
@@ -61,17 +65,66 @@ test('launcher requires exact parent opt-in; caller env cannot grant it', () => 
 test('launcher passes exact args, locked target and flag without a shell', t => {
   let actual
   const child = fakeChild()
-  const client = launchNativeClient({ helper, target: 'fixture;no-shell', env: { BUNJI_NATIVE_EXPERIMENT: '0' },
+  const client = launchNativeClient({ helper, target: 'com.apple.Notes', env: { BUNJI_NATIVE_EXPERIMENT: '0' },
     killGraceMs: 5, spawnImpl: (...args) => { actual = args; return child } })
   t.after(() => client.close())
   assert.equal(actual[0], helper)
-  assert.deepEqual(actual[1], ['--stdio', '--target', 'fixture;no-shell'])
+  assert.deepEqual(actual[1], ['--stdio', '--target', 'com.apple.Notes'])
   assert.equal(actual[2].env.BUNJI_NATIVE_EXPERIMENT, '1')
   assert.equal(actual[2].shell, false)
   assert.throws(() => launchNativeClient({ helper: './relative' }), /absolute/)
   assert.throws(() => launchNativeClient({ helper, target: '' }), /target/)
+  for (const target of ['fixture;no-shell', 'com.apple.Terminal', 'Fixture', 'com.apple.Notes ', '', null]) {
+    assert.throws(() => launchNativeClient({ helper, target, spawnImpl: () => assert.fail('must not spawn') }), /target/)
+    if (typeof target === 'string') assert.throws(() => parseLauncherArgs(['--helper', helper, '--target', target]), /target/)
+  }
   assert.deepEqual({ ...parseLauncherArgs(['--helper', helper]) }, { helper, target: 'fixture' })
   assert.throws(() => parseLauncherArgs(['--helper', helper, '--resume']), /Unknown option/)
+})
+
+test('launcher keeps only OS environment keys and the experiment flag', t => {
+  const allowed = { PATH: '/test/bin', HOME: '/test/home', USER: 'test', LOGNAME: 'test',
+    TMPDIR: '/test/tmp', LANG: 'en_US.UTF-8', LC_ALL: 'C', LC_CTYPE: 'UTF-8', __CF_USER_TEXT_ENCODING: '0x0:0:0' }
+  const denied = { OPENAI_API_KEY: 'test-canary', ANTHROPIC_API_KEY: 'test-canary', CODEX_HOME: '/test/codex',
+    BUNJI_NATIVE_DEPENDENCY_ROOT: '/test/repo', FAKE_NATIVE_MODE: 'exit', NODE_OPTIONS: '--inspect',
+    DYLD_INSERT_LIBRARIES: '/test/library', SSH_AUTH_SOCK: '/test/ssh', BUNJI_NATIVE_EXPERIMENT: '0' }
+  let options
+  const child = fakeChild()
+  const client = launchNativeClient({ helper, env: { ...allowed, ...denied }, killGraceMs: 5,
+    spawnImpl: (_file, _args, value) => { options = value; return child } })
+  t.after(() => client.close())
+  assert.deepEqual(options.env, { ...allowed, BUNJI_NATIVE_EXPERIMENT: '1' })
+})
+
+test('SDK honors Notes target locked by launcher using only the fake helper', async t => {
+  const { call } = await connected(t, undefined, { target: 'com.apple.Notes' })
+  const result = await call('native_observe')
+  assert.equal(result.isError, undefined)
+  assert.match(result.content[0].text, /com.apple.Notes/)
+  assert.equal((await call('native_focus', { target: 'fixture' })).isError, true)
+})
+
+test('SDK caps native action inputs in UTF-16 units before child dispatch', async t => {
+  const { call, native } = await connected(t, 'echo-actions')
+  const key = { type: 'key', key: 'return' }
+  const valid = [
+    { frameId: 'f'.repeat(128), action: key },
+    { frameId: '🦊'.repeat(64), action: key },
+    ...['x', 'x'.repeat(1000), '🦊'.repeat(500)].map(text => ({ frameId: 'frame-1', action: { type: 'type', text } })),
+    ...[1, 600].map(amount => ({ frameId: 'frame-1', action: { type: 'scroll', direction: 'up', amount } })),
+    { frameId: 'frame-1', action: { type: 'press', elementId: 'e'.repeat(128) } },
+  ]
+  for (const args of valid) assert.equal((await call('native_act', args)).isError, undefined)
+  const invalid = [
+    ...['', 'f'.repeat(129), '🦊'.repeat(65)].map(frameId => ({ frameId, action: key })),
+    ...['', 'e'.repeat(129), '🦊'.repeat(65)].map(elementId => ({ frameId: 'frame-1', action: { type: 'press', elementId } })),
+    ...['', 'x'.repeat(1001), '🦊'.repeat(501), '\0', '\t', '\r', '\n', 'text\n', '\ntext', 'te\nxt', '\x1b', '\x7f', '\u0085', '\u200b', '\u202e', '\ufeff']
+      .map(text => ({ frameId: 'frame-1', action: { type: 'type', text } })),
+    ...[0, 601, 1.5].map(amount => ({ frameId: 'frame-1', action: { type: 'scroll', direction: 'down', amount } })),
+  ]
+  const sent = native.sequence
+  for (const args of invalid) assert.equal((await call('native_act', args)).isError, true, JSON.stringify(args))
+  assert.equal(native.sequence, sent, 'invalid tool inputs must not reach native')
 })
 
 test('NDJSON handles fragmented UTF-8, serial queue and helper errors', async t => {
@@ -204,7 +257,10 @@ test('SDK rejects model target/resume injection and bad actions; native validate
     assert.equal((await call('native_act', { frameId: 'frame-1', action })).isError, undefined)
   }
   await call('native_stop')
-  assert.equal((await call('native_focus')).isError, true)
+  const focused = await call('native_focus')
+  assert.equal(focused.isError, true)
+  assert.match(focused.content[0].text, /restart the lab/)
+  assert.equal((await call('native_observe')).isError, true)
   assert.equal((await call('native_act', { frameId: 'frame-1', action: { type: 'key', key: 'return' } })).isError, true)
   assert.equal((await call('native_resume')).isError, true)
 })
@@ -217,7 +273,7 @@ for (const mode of ['wrong-target', 'bad-image']) test(`SDK rejects ${mode} and 
 })
 
 for (const mode of ['exit', 'eof', 'timeout', 'oversize', 'ignore-term']) test(`real child lifecycle: ${mode}`, async t => {
-  const native = launchNativeClient({ helper, env: { ...process.env, FAKE_NATIVE_MODE: mode }, timeoutMs: 200, maxLineBytes: 4096, killGraceMs: 20 })
+  const native = launchNativeClient({ helper, spawnImpl: spawnFakeMode(mode), timeoutMs: 200, maxLineBytes: 4096, killGraceMs: 20 })
   t.after(() => native.close())
   const exit = once(native.child, 'exit')
   await assert.rejects(native.request('status'), /transport failed/)
@@ -228,7 +284,8 @@ for (const mode of ['exit', 'eof', 'timeout', 'oversize', 'ignore-term']) test(`
 
 test('real stdio MCP handshake, calls and EOF clean up the helper', async t => {
   const transport = new StdioClientTransport({ command: process.execPath,
-    args: [serverPath, '--helper', helper], env: { ...process.env, FAKE_NATIVE_MODE: '' }, stderr: 'pipe' })
+    args: [serverPath, '--helper', helper], env: { ...process.env,
+      FAKE_NATIVE_MODE: 'exit', OPENAI_API_KEY: 'test-canary', CODEX_HOME: '/test-canary' }, stderr: 'pipe' })
   const client = new Client({ name: 'stdio-test', version: '1' })
   t.after(() => client.close())
   await client.connect(transport)
@@ -237,6 +294,10 @@ test('real stdio MCP handshake, calls and EOF clean up the helper', async t => {
   const data = JSON.parse(status.content[0].text.split('\n').slice(1).join('\n'))
   assert.equal(data.target, 'fixture')
   assert.equal(data.enabled, '1')
+  assert.ok(!data.environmentKeys.includes('FAKE_NATIVE_MODE'))
+  assert.ok(!data.environmentKeys.includes('OPENAI_API_KEY'))
+  assert.ok(!data.environmentKeys.includes('CODEX_HOME'))
+  assert.ok(!data.environmentKeys.includes('BUNJI_NATIVE_DEPENDENCY_ROOT'))
   await client.close()
   // SDK closes bridge stdin first. Give the OS a bounded chance to reap native.
   for (let i = 0; i < 40; i++) {

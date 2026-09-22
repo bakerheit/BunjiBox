@@ -7,20 +7,26 @@ Uses the repo's existing `@modelcontextprotocol/sdk` and `zod`; no install neede
 
 ## Run
 
-Node >=22.13 is required. From this worktree:
+Node >=22.13 is required. Build the parent-owned helper from the main checkout:
 
 ```sh
-cd /Users/andrewbaker/workspace/.worktrees/bunjibox-native-mcp-prototype
+cd /Users/andrewbaker/workspace/BunjiBox
+zsh experiments/computer-use-native/build-lab.sh
+```
+
+Then launch the bridge:
+
+```sh
+cd /Users/andrewbaker/workspace/BunjiBox
 BUNJI_NATIVE_EXPERIMENT=1 \
 BUNJI_NATIVE_DEPENDENCY_ROOT=/Users/andrewbaker/workspace/BunjiBox \
 node experiments/computer-use-native-bridge/server.mjs \
-  --helper /Users/andrewbaker/workspace/.worktrees/bunjibox-native-mcp-prototype/experiments/computer-use-native/build/BunjiNativeLab.app/Contents/MacOS/BunjiNativeLab \
+  --helper '/Users/andrewbaker/workspace/BunjiBox/experiments/computer-use-native/.build/lab/Bunji Native Lab.app/Contents/MacOS/BunjiNativeLab' \
   --target fixture
 ```
 
-The `.app` executable above is the expected **eventual** parent build output; this
-bridge does not build or supply it. Adjust only the host launcher path if the parent
-build places the app elsewhere. The helper must implement the protocol below.
+The `.app` executable above is the native helper's actual main-checkout build path.
+Its source and build script belong to the parent; this bridge does not supply them.
 The command serves MCP on stdin/stdout and waits for an MCP client, not typed chat.
 Only startup errors go to stderr. Native stderr is drained and discarded.
 
@@ -33,9 +39,9 @@ does not contain Node):
     "bunji-native-experiment": {
       "command": "node",
       "args": [
-        "/Users/andrewbaker/workspace/.worktrees/bunjibox-native-mcp-prototype/experiments/computer-use-native-bridge/server.mjs",
+        "/Users/andrewbaker/workspace/BunjiBox/experiments/computer-use-native-bridge/server.mjs",
         "--helper",
-        "/Users/andrewbaker/workspace/.worktrees/bunjibox-native-mcp-prototype/experiments/computer-use-native/build/BunjiNativeLab.app/Contents/MacOS/BunjiNativeLab",
+        "/Users/andrewbaker/workspace/BunjiBox/experiments/computer-use-native/.build/lab/Bunji Native Lab.app/Contents/MacOS/BunjiNativeLab",
         "--target",
         "fixture"
       ],
@@ -52,10 +58,14 @@ does not contain Node):
 repo dependencies. It must point at a trusted existing checkout, not at node_modules.
 The bridge refuses to spawn unless its own parent environment has exactly
 `BUNJI_NATIVE_EXPERIMENT=1`. It then passes that value to the child. The helper path
-must be absolute. The launcher owns `--target` (default `fixture`); no tool accepts
+must be absolute. The launcher accepts only `--target fixture` (the default) or
+`--target com.apple.Notes`; all other targets are rejected before spawn. No tool accepts
 target, executable, environment, start, or resume arguments. Child execution uses
-`spawn(helper, ['--stdio', '--target', target])` with no shell. Normal environment
-inheritance applies; this bridge does not read or emit credential stores.
+`spawn(helper, ['--stdio', '--target', target])` with no shell. The child receives only
+`PATH`, `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `LANG`, `LC_*`,
+`__CF_USER_TEXT_ENCODING`, and the experiment flag. API keys, `CODEX_HOME`,
+`BUNJI_NATIVE_DEPENDENCY_ROOT`, test fixture settings, and all other environment
+variables are excluded. The bridge does not read or emit credential stores.
 
 ## Native contract and tool behavior
 
@@ -71,7 +81,7 @@ request but leave the transport usable; malformed transport data terminates it.
 | `native_focus` | `focus` | No | Focus only; native must enforce takeover state |
 | `native_observe` | `observe` | Yes | MCP PNG image plus bounded, untrusted metadata |
 | `native_act` | `act` | No | Forward validated action shape and frame ID |
-| `native_stop` | `stop` | No | Interrupt queue; cancel work not yet sent |
+| `native_stop` | `stop` | No | Terminal stop; interrupt queue; restart lab to use again |
 
 `native_act` accepts `{frameId, action}`. Actions:
 
@@ -85,8 +95,10 @@ request but leave the transport usable; malformed transport data terminates it.
 
 Keys are restricted to `return`, `tab`, `escape`, `command+n`, `command+a`. Click
 coordinates are nonnegative integer **screenshot pixels**, not desktop coordinates.
-Scroll amount is an integer from 1 to 10,000; typed text is at most 16,384 UTF-16
-code units. IDs are at most 512 code units. All tool and action objects reject extra
+Scroll amount is an integer from 1 to 600. Typed text requires 1–1000 UTF-16 code
+units and no Unicode control or format characters (categories Cc/Cf, matching
+Foundation's control-character set). Use key actions for Return, Tab, etc.
+Frame IDs and element IDs require 1–128 UTF-16 code units. All tool and action objects reject extra
 fields. Native remains authoritative for pixel bounds, freshness, element validity,
 foreground window, target ownership, permissions, user takeover, and final races.
 
@@ -105,10 +117,11 @@ Normal requests serialize. Up to 16 total normal requests may be queued/inflight
 stop has one reserved slot and is written immediately, even with an action awaiting
 a response. The native helper **must process stop immediately**, and must recheck
 authorization at the final action boundary. A bridge cannot undo an action already
-applied. There is no model start/resume tool or automatic restart/retry. After user
-takeover, the native helper must keep control suspended until the **host UI** resumes
-it; focus must never grant control. These native guarantees need separate Swift/GUI
-validation by the parent.
+applied. **Stop is terminal: restart the lab to begin again.** Host UI Resume cannot
+undo Stop. Only the **Take over** pause can resume through the host UI; focus must
+never grant control. There is no model start/resume tool or automatic restart/retry.
+Native safety and actual Swift/GUI/model validation belong to the parent; the bridge
+tests do not duplicate those checks.
 
 Each sent request has a 15-second **transport response deadline**, not a timeout for
 the user's whole task. Queued time does not consume it. An unresponsive transport,
@@ -129,7 +142,7 @@ trusted host code, not tools exposed to models.
 ## Test
 
 ```sh
-cd /Users/andrewbaker/workspace/.worktrees/bunjibox-native-mcp-prototype
+cd /Users/andrewbaker/workspace/BunjiBox
 BUNJI_NATIVE_EXPERIMENT=1 \
 BUNJI_NATIVE_DEPENDENCY_ROOT=/Users/andrewbaker/workspace/BunjiBox \
 node --test experiments/computer-use-native-bridge/test/bridge.test.mjs
@@ -138,6 +151,9 @@ node --test experiments/computer-use-native-bridge/test/bridge.test.mjs
 The executable fake helper implements only an in-memory fixture. Tests exercise
 both the actual SDK in-memory transport and a real stdio MCP subprocess, plus
 fragmented NDJSON, protocol failures, stop priority, strict schemas, images, locked
-targets, opt-in gating, stale-frame/native action errors, EOF/exit, timeout, kill
+targets, opt-in gating, environment filtering, schema boundaries, terminal-stop
+error forwarding, stale-frame/native action errors, EOF/exit, timeout, kill
 escalation, and helper cleanup. This proves bridge behavior, not real macOS
 permissions, accessibility, screenshot accuracy, or takeover detection.
+Fault modes are injected through the test's `spawnImpl` hook after environment
+filtering; production spawning never passes fixture settings through.
