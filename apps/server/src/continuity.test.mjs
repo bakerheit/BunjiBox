@@ -14,10 +14,11 @@ import { createBotRoutes } from './bots.mjs'
 import { buildContext } from '@bunji/core/context'
 import { createMemoryServer } from '@bunji/core/memory-mcp'
 import { providerCommand } from '@bunji/core/runtime'
+import { AUTO_AGENT_CLOSE, AUTO_AGENT_OPEN } from '@bunji/core/mode-router'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
-const settings = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low' }
+const settings = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', mode: 'agent' }
 async function fixture(t, run) {
   const dir = await mkdtemp(join(await realpath(tmpdir()), 'bunji-continuity-test-'))
   const path = join(dir, 'workspace.sqlite'), bots = openBotStore({ path }), chats = openChatStore({ path })
@@ -43,6 +44,76 @@ test('full-Mac requests and memory writes work from any same-origin device', asy
   assert.equal((await done(f.chats, 'device-one')).status, 'complete')
   assert.equal(calls, 1)
 })
+test('OpenRouter requests pass through shared chat persistence and the provider runner', async t => {
+  let observed, observedHooks
+  const f = await fixture(t, async (options, hooks) => { observed = options; observedHooks = hooks; return { ok: true, text: 'OpenRouter reply', usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } } })
+  const started = f.service.start('bunjibox', { id: 'openrouter-shared', prompt: 'Hello', provider: 'openrouter', model: 'openrouter/free', effort: 'medium' })
+  assert.equal(started.created, true)
+  const request = await done(f.chats, 'openrouter-shared')
+  assert.equal(request.status, 'complete')
+  assert.equal(request.provider, 'openrouter')
+  assert.equal(request.mode, 'chat')
+  assert.equal(request.memoryWrite, false)
+  assert.equal(request.text, 'OpenRouter reply')
+  assert.equal(request.usage.totalTokens, 6)
+  assert.equal(observed.model, 'openrouter/free')
+  assert.deepEqual(observedHooks.messages.map(message => message.role), ['system', 'user'])
+  assert.match(observedHooks.messages[0].content, /assigned assistant identity/)
+  assert.equal(observedHooks.messages[1].content, 'Hello')
+})
+test('Chat mode persists its boundary and never receives Bunji or machine tools', async t => {
+  let observed
+  const f = await fixture(t, async (options, hooks) => { observed = { options, hooks }; return { ok: true, text: 'Hi from Chat', usage: { inputTokens: 5, outputTokens: 4, totalTokens: 9 } } })
+  f.bots.confirmMachine('bunjibox', { scope: 'machine', level: 'auto', network: 'off' })
+  f.service.start('bunjibox', { id: 'lean-chat', prompt: 'Hello', ...settings, mode: 'chat' })
+  const request = await done(f.chats, 'lean-chat')
+  assert.equal(request.status, 'complete')
+  assert.equal(request.mode, 'chat')
+  assert.equal(request.memoryWrite, false)
+  assert.equal(observed.options.mode, 'chat')
+  assert.equal(observed.hooks.memory, undefined)
+  assert.equal(observed.hooks.computer, undefined)
+  assert.equal(observed.hooks.files, undefined)
+  assert.deepEqual(observed.hooks.messages.map(message => message.role), ['system', 'user'])
+  assert.match(request.activities.find(activity => activity.id === 'bunji-mode-route').text, /memory, files, and computer tools are off/)
+})
+test('Auto routes obvious work directly to Agent within saved permissions', async t => {
+  let observed
+  const f = await fixture(t, async (options, hooks) => { observed = { options, hooks }; return { ok: true, text: 'Created it.', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } } })
+  f.service.start('bunjibox', { id: 'auto-agent', prompt: 'Create a spreadsheet file in the workspace', ...settings, mode: 'auto' })
+  const request = await done(f.chats, 'auto-agent')
+  assert.equal(request.requestedMode, 'auto')
+  assert.equal(request.mode, 'agent')
+  assert.equal(request.memoryWrite, true)
+  assert.equal(observed.options.mode, 'agent')
+  assert.equal(observed.hooks.memory.botId, 'bunjibox')
+  assert.match(request.modeReason, /change or create files/i)
+  assert.equal(request.activities.find(activity => activity.id === 'bunji-mode-route').title, 'Auto → Agent')
+})
+test('Auto lets the selected Chat model hand ambiguous work to Agent and totals both calls', async t => {
+  const calls = []
+  const f = await fixture(t, async (options, hooks) => {
+    calls.push({ options, hooks })
+    if (options.mode === 'chat') return { ok: true, text: `${AUTO_AGENT_OPEN}I need the filesystem.${AUTO_AGENT_CLOSE}`,
+      usage: { inputTokens: 8, outputTokens: 3, cachedInputTokens: 2, cacheWriteTokens: null, reasoningOutputTokens: 1, totalTokens: 11, source: 'Chat usage' } }
+    return { ok: true, text: 'Finished with tools.',
+      usage: { inputTokens: 20, outputTokens: 4, cachedInputTokens: 5, cacheWriteTokens: null, reasoningOutputTokens: 2, totalTokens: 24, source: 'Agent usage' } }
+  })
+  f.service.start('bunjibox', { id: 'auto-handoff', prompt: 'Could you help me organize this?', ...settings, mode: 'auto' })
+  const request = await done(f.chats, 'auto-handoff')
+  assert.deepEqual(calls.map(call => call.options.mode), ['chat', 'agent'])
+  assert.equal(calls[0].hooks.memory, undefined)
+  assert.equal(calls[1].hooks.memory.botId, 'bunjibox')
+  assert.equal(request.requestedMode, 'auto')
+  assert.equal(request.mode, 'agent')
+  assert.equal(request.text, 'Finished with tools.')
+  assert.equal(request.usage.inputTokens, 28)
+  assert.equal(request.usage.outputTokens, 7)
+  assert.equal(request.usage.totalTokens, 35)
+  assert.equal(request.usage.cacheWriteTokens, null)
+  assert.match(request.modeReason, /selected model requested Agent mode/i)
+  assert.equal(request.activities.find(activity => activity.id === 'bunji-mode-handoff').title, 'Auto → Agent')
+})
 async function done(chats, id) {
   for (let i = 0; i < 100; i++) { const request = chats.get(id); if (request?.status !== 'running') return request; await delay(5) }
   throw new Error('Test run did not finish')
@@ -64,9 +135,10 @@ test('service persists before acknowledgement, owns disconnected runs, and retri
   const response = await fetch(base + '/api/bots/bunjibox/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
   assert.equal(response.status, 202)
   assert.equal((await response.json()).request.prompt, body.prompt)
-  assert.equal((await (await fetch(base + '/api/bots/bunjibox/history')).json()).requests[0].activities[0].title, 'memory_search')
+  assert.ok((await (await fetch(base + '/api/bots/bunjibox/history')).json()).requests[0].activities.some(activity => activity.title === 'memory_search'))
   assert.equal(observed.hooks.signal.aborted, false, 'acknowledged response closing is not cancellation')
   assert.equal(observed.hooks.memory.allowWrites, true)
+  assert.equal(observed.options.mode, 'agent')
   assert.equal(observed.hooks.memory.botId, 'bunjibox')
   assert.equal(f.service.start('bunjibox', body).created, false)
   assert.throws(() => f.service.start('bunjibox', { ...body, id: 'two' }), error => error.status === 409)
@@ -89,7 +161,7 @@ test('cancellation preserves reported usage, different providers share context, 
   })
   f.service.start('bunjibox', { id: 'first', prompt: 'I like green tea', ...settings, memoryWrite: false }); await done(f.chats, 'first')
   assert.equal(f.chats.get('first').memoryWrite, true, 'older clients cannot disable normal memory access')
-  f.service.start('bunjibox', { id: 'next', prompt: 'What tea?', provider: 'claude', model: 'haiku', effort: 'low' }); await done(f.chats, 'next')
+  f.service.start('bunjibox', { id: 'next', prompt: 'What tea?', provider: 'claude', model: 'haiku', effort: 'low', mode: 'agent' }); await done(f.chats, 'next')
   assert.match(seen.prompt, /Green tea is preferred/)
   assert.equal(f.chats.get('next').contextTurns, 1)
   assert.equal(f.chats.get('next').memoryWrite, true)
@@ -156,11 +228,32 @@ test('editing saved messages and deleting an agent transfers linked memories', a
   assert.equal((await f.memory.list('trash-bot')).notes.length, 0)
   assert.equal((await f.memory.list('bunjibox')).notes.length, 3)
 })
+test('rewind returns the target prompt and removes that turn plus later turns', async t => {
+  const f = await fixture(t, async options => ({ ok: true, text: `Reply to ${options.prompt}` }))
+  const route = createContinuityRoutes(f), server = http.createServer((request, response) => void route(request, response))
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections() }))
+  const base = `http://127.0.0.1:${server.address().port}`
+  const send = (id, prompt) => fetch(base + '/api/bots/bunjibox/messages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, prompt, ...settings }) })
+  await send('keep', 'Keep this')
+  await done(f.chats, 'keep')
+  await send('rewind', 'Try this again')
+  await done(f.chats, 'rewind')
+  await send('later', 'This goes away')
+  await done(f.chats, 'later')
+  const rewound = await fetch(base + '/api/bots/bunjibox/rewind', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'rewind', expectedPrompt: 'Try this again' }) })
+  assert.equal(rewound.status, 200)
+  assert.deepEqual((await rewound.json()).rewind, { id: 'rewind', botId: 'bunjibox', prompt: 'Try this again', removed: 2 })
+  assert.deepEqual(f.chats.history('bunjibox').requests.map(request => request.id), ['keep'])
+})
 test('context is bounded and explicitly reports omitted full exchanges', () => {
   const turns = Array.from({ length: 20 }, (_, index) => ({ prompt: `Question ${index}`, text: 'answer '.repeat(500), status: 'complete' }))
   const result = buildContext({ name: 'Agent' }, turns, 'Continue', { completedCount: 45 })
   assert.ok(result.prompt.length <= 12000); assert.equal(result.omittedTurns, 45 - result.contextTurns)
   assert.match(result.prompt, /Question 19/); assert.match(result.prompt, /Memory writes are available in every chat/)
+  assert.equal(result.messages[0].role, 'system'); assert.match(result.messages[0].content, /You are Agent.*assigned assistant identity/)
+  assert.deepEqual(result.messages.slice(-3).map(message => message.role), ['user', 'assistant', 'user'])
+  assert.equal(result.messages.at(-1).content, 'Continue')
   assert.throws(() => buildContext({ name: 'Agent' }, [], 'x'.repeat(12000)), /too long/)
 })
 test('MCP protocol enforces bot and immutable write scope, exposes only bounded notes', async t => {

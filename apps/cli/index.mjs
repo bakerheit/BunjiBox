@@ -2,7 +2,7 @@
 import { parseArgs } from 'node:util'
 import { resolve } from 'node:path'
 import { createElement } from 'react'
-import { runProvider, providerCommand, runtimes } from '@bunji/core/runtime'
+import { runProvider, providerCommand, runtimes, normalizeMode } from '@bunji/core/runtime'
 import { BunjiSession } from './session.mjs'
 import { BotClient } from '@bunji/shared/bot-client'
 import { ChatClient } from '@bunji/shared/chat-client'
@@ -10,6 +10,7 @@ import { botTransport } from '@bunji/shared/bot-api'
 import { cliBot } from '@bunji/shared/bots'
 import { safeText } from './format.mjs'
 import { ensureChatService } from './service.mjs'
+import { routeAutoPrompt } from '@bunji/shared/auto-mode'
 
 const HELP = `bunji — the BunjiBox terminal workbench
 
@@ -80,18 +81,28 @@ try {
     override.provider = provider; override.model = values.model
   }
   if (values.effort) override.effort = values.effort
+  override.mode = normalizeMode(override.provider, override.mode)
   // Validate exact CLI arguments before normalizeRuntime can fall back.
   const selected = { ...session.bot, ...override }
-  providerCommand({ ...selected, prompt: values.print ?? 'validate settings' }, { computer: selected.computer })
+  const validationPrompt = values.print ?? 'validate settings'
+  // An explicit --cwd means the caller intentionally selected a workspace.
+  // Keep the historical one-shot behavior and resolve Auto to Agent there.
+  const validationMode = selected.mode === 'auto'
+    ? values.print !== undefined && values.cwd !== undefined ? 'agent' : routeAutoPrompt(selected.provider, validationPrompt).mode
+    : selected.mode
+  providerCommand({ ...selected, mode: validationMode, prompt: validationPrompt }, { computer: validationMode === 'agent' ? selected.computer : undefined })
   if (values.provider || values.model || values.effort) session.update(override)
   if (values.print !== undefined) {
     const controller = new AbortController()
     const stop = () => controller.abort()
     process.once('SIGINT', stop); process.once('SIGTERM', stop)
     const oneShotBot = { ...session.bot }
-    const result = await runProvider({ ...oneShotBot, prompt: values.print }, {
+    const oneShotMode = oneShotBot.mode === 'auto'
+      ? values.cwd !== undefined ? 'agent' : routeAutoPrompt(oneShotBot.provider, values.print).mode
+      : oneShotBot.mode
+    const result = await runProvider({ ...oneShotBot, mode: oneShotMode, prompt: values.print }, {
       signal: controller.signal,
-      computer: oneShotBot.computer,
+      ...(oneShotMode === 'agent' ? { computer: oneShotBot.computer } : {}),
       onActivity: values.json ? activity => process.stdout.write(JSON.stringify({ type: 'activity', activity }) + '\n') : undefined,
     })
     process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop)

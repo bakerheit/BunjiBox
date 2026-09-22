@@ -5,7 +5,7 @@ import { ChatClient } from '../src/chat-client.js'
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 const deferred = () => Promise.withResolvers()
 const flush = () => new Promise(resolve => setImmediate(resolve))
-const runtime = { provider: 'codex', model: 'test-model', effort: 'low' }
+const runtime = { provider: 'codex', model: 'test-model', effort: 'low', mode: 'agent' }
 
 test('default fetch is called without the ChatClient receiver used by member calls', async t => {
   let receiver
@@ -162,6 +162,16 @@ test('coalescing is per bot and full payload with memory enabled', async () => {
   const requests = await Promise.all(tasks)
   assert.equal(new Set(requests.map(request => request.id)).size, 3)
   assert.equal(api.executions, 3)
+  const bodies = api.calls.filter(call => call.path.endsWith('/messages')).map(call => JSON.parse(call.options.body))
+  assert.ok(bodies.every(body => body.mode === 'agent' && body.memoryWrite === true))
+})
+
+test('Chat mode is sent explicitly and cannot claim memory writes', async () => {
+  const api = server(), client = new ChatClient({ fetcher: api.fetcher })
+  await client.send('a', 'Lean greeting', { ...runtime, mode: 'chat' })
+  const body = JSON.parse(api.calls.find(call => call.path.endsWith('/messages')).options.body)
+  assert.equal(body.mode, 'chat')
+  assert.equal(body.memoryWrite, false)
 })
 
 test('a read started before a send cannot hide the accepted request', async () => {

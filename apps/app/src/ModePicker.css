@@ -1,0 +1,11 @@
+.mode-picker-wrap { display:grid; gap:8px; min-width:0; }
+.mode-picker { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px; padding:3px; border:1px solid #343434; border-radius:10px; background:#111; }
+.mode-picker button { min-height:34px; padding:6px 10px; border-radius:7px; color:#999; font-size:12px; }
+.mode-picker button[aria-pressed='true'] { background:#383838; color:#fff; box-shadow:0 1px 4px #0007; }
+.mode-picker button:disabled { color:#555; cursor:not-allowed; }
+.mode-picker-note { margin:0 !important; color:#8f8f8f !important; font-size:11px !important; line-height:1.5 !important; }
+.mode-picker-wrap.compact { flex-shrink:0; }
+.mode-picker-wrap.compact .mode-picker { display:flex; border:0; background:transparent; padding:0; gap:1px; }
+.mode-picker-wrap.compact .mode-picker button { min-height:30px; padding:5px 8px; font-size:11px; }
+.mode-picker-wrap.compact .mode-picker button[aria-pressed='true'] { background:#474747; }
+@media(max-width:500px) { .mode-picker-wrap.compact .mode-picker button { padding-inline:7px; } }

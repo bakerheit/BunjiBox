@@ -1,9 +1,9 @@
-import { normalizeRuntime, runtimes, effortSteps } from './runtimes.js'
+import { normalizeMode, normalizeRuntime, runtimes, effortSteps } from './runtimes.js'
 
 export const colors = ['cyan', 'blue', 'magenta', 'green', 'yellow', 'red', 'white']
 export const colorValues = { cyan: '#00ad9c', blue: '#087ee7', magenta: '#8247e5', green: '#00a56a', yellow: '#ff9c00', red: '#ee1734', white: '#ffffff' }
 export const shapes = { hexagon: '⬡', circle: '●', square: '■', diamond: '◆', triangle: '▲', pebble: '●', pill: '▬', cloud: '☁', drop: '♦' }
-const fields = ['name', 'description', 'provider', 'model', 'effort', 'avatar', 'computer']
+const fields = ['name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer']
 export const validId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id)
 const object = value => value && typeof value === 'object' && !Array.isArray(value)
 function text(value, max, label) {
@@ -41,7 +41,9 @@ export function makeBot(value) {
   if (value.provider !== undefined && !Object.hasOwn(runtimes, value.provider)) throw new Error('Unknown provider.')
   if (value.model !== undefined && !runtimes[runtime.provider].models.some(model => model.id === value.model)) throw new Error('Unsupported model.')
   if (value.effort !== undefined && !effortSteps(runtime.provider, runtime.model).includes(value.effort)) throw new Error('Unsupported effort.')
-  return { id: value.id, name: text(value.name ?? 'New bot', 60, 'Name').replace(/\n/g, ' '), description: text(value.description ?? '', 1800, 'Description'), ...runtime, avatar: avatarValue(value.avatar), computer: computerValue(value.computer) }
+  if (value.mode !== undefined && normalizeMode(runtime.provider, value.mode) !== value.mode) throw new Error('That mode is not supported by this provider.')
+  return { id: value.id, name: text(value.name ?? 'New bot', 60, 'Name').replace(/\n/g, ' '), description: text(value.description ?? '', 1800, 'Description'), ...runtime,
+    mode: normalizeMode(runtime.provider, value.mode), avatar: avatarValue(value.avatar), computer: computerValue(value.computer) }
 }
 
 export function patchBot(bot, changes) {
@@ -52,14 +54,16 @@ export function patchBot(bot, changes) {
     Object.assign(next, normalizeRuntime(next))
     if (changes.provider !== undefined && !Object.hasOwn(runtimes, changes.provider)) throw new Error('Unknown provider.')
     if (changes.model !== undefined && !runtimes[next.provider].models.some(model => model.id === changes.model)) throw new Error('Unsupported model.')
+    next.mode = normalizeMode(next.provider, next.mode)
   }
+  if (changes.mode !== undefined && normalizeMode(next.provider, changes.mode) !== changes.mode) throw new Error('That mode is not supported by this provider.')
   if (changes.effort !== undefined && !effortSteps(next.provider, next.model).includes(changes.effort)) throw new Error('Unsupported effort.')
   return makeBot(next)
 }
 
 export const defaultBots = () => [
-  makeBot({ id: 'bunjibox', name: 'BunjiBox', avatar: { color: colorValues.cyan } }),
-  makeBot({ id: 'scout', name: 'Scout', description: 'Research and compare tools. Cite sources and keep findings concise.', avatar: { shape: 'circle', color: colorValues.magenta } }),
+  makeBot({ id: 'bunjibox', name: 'BunjiBox', mode: 'auto', avatar: { color: colorValues.cyan } }),
+  makeBot({ id: 'scout', name: 'Scout', mode: 'auto', description: 'Research and compare tools. Cite sources and keep findings concise.', avatar: { shape: 'circle', color: colorValues.magenta } }),
 ]
 
 export function legacyBot(value) {

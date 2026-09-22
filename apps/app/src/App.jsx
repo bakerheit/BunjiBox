@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Activity, ArrowUp, BookOpen, Bot, Check, ChevronDown, ChevronRight, Ellipsis, FolderOpen, Gauge, Laptop2, Menu, PanelRight, Pencil, Plus, Search, Settings2, Trash2, X } from 'lucide-react'
+import { Activity, ArrowUp, BookOpen, Bot, Check, ChevronDown, ChevronRight, Ellipsis, FolderOpen, Gauge, Laptop2, Menu, PanelRight, Pencil, Plus, RotateCcw, Search, Settings2, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import './App.css'
 import { Avatar, AvatarEditor, AvatarProvider } from './AvatarPicker'
 import { EffortPicker } from './EffortPicker'
-import { effortSteps, normalizeRuntime, runtimes } from '@bunji/shared/runtimes'
+import { effortSteps, modeDisplay, normalizeMode, normalizeRuntime, runtimes } from '@bunji/shared/runtimes'
 import UsagePage from './UsagePage'
 import TokenLog from './TokenLog'
 import { summarizeRequests, tokenCount } from '@bunji/shared/token-usage'
@@ -14,7 +14,10 @@ import RunActivity from './RunActivity'
 import MemoryPanel from './MemoryPanel'
 import ComputerAccessPanel from './ComputerAccessPanel'
 import FilesPanel from './FilesPanel'
+import ModePicker from './ModePicker'
+import { modeNote } from './mode-copy'
 import { ChatClient } from '@bunji/shared/chat-client'
+import { routeAutoPrompt } from '@bunji/shared/auto-mode'
 
 import { createBrowserBotClient } from '@bunji/shared/bot-api'
 
@@ -25,7 +28,7 @@ function ModelSelect({ bot, onChange, label = 'Model', compact = false }) {
       const separator = event.target.value.indexOf(':')
       const provider = event.target.value.slice(0, separator)
       const model = event.target.value.slice(separator + 1)
-      onChange({ provider, model, effort: effortSteps(provider, model).includes(bot.effort) ? bot.effort : 'medium' })
+      onChange({ provider, model, effort: effortSteps(provider, model).includes(bot.effort) ? bot.effort : 'medium', mode: normalizeMode(provider, bot.mode) })
     }}>
       {Object.entries(runtimes).map(([provider, runtime]) => <optgroup key={provider} label={runtime.label}>
         {runtime.models.map(model => <option key={model.id} value={provider + ':' + model.id}>{model.label}</option>)}
@@ -129,7 +132,7 @@ function Details({ bot, update, refreshBots, status, view, setView, onClose, onD
           <label className="field"><span>Name</span><input aria-label="Bot name" maxLength={60} value={bot.name} onChange={event => update({ name: event.target.value })} placeholder="Name your bot" /></label>
           <label className="field"><span>Description</span><textarea aria-label="Bot description" maxLength={1800} rows={4} value={bot.description} onChange={event => update({ description: event.target.value })} placeholder="What this bot is for" /></label>
           <p className="field-note">This description guides your bot's replies.</p>
-          <div className="settings-card"><ModelSelect bot={bot} onChange={update} label="Default model" /><div className="effort-setting"><span>Thinking effort</span><EffortPicker modelLabel={runtimes[bot.provider].models.find(m => m.id === bot.model)?.label} effort={bot.effort} steps={effortSteps(bot.provider, bot.model)} onChange={effort => update({ effort })} /></div></div>
+          <div className="settings-card"><ModePicker provider={bot.provider} mode={bot.mode} onChange={mode => update({ mode })} /><ModelSelect bot={bot} onChange={update} label="Default model" /><div className="effort-setting"><span>Thinking effort</span><EffortPicker modelLabel={runtimes[bot.provider].models.find(m => m.id === bot.model)?.label} effort={bot.effort} steps={effortSteps(bot.provider, bot.model)} onChange={effort => update({ effort })} /></div></div>
           {saveError ? <p role="alert">{saveError}</p> : <p className="saved-note"><Check size={12} /> {saving ? 'Saving to workspace…' : 'Saved · shared across devices'}</p>}
           <button className="text-action delete-agent-link" onClick={onDelete} disabled={!canDelete}><Trash2 size={15} />Delete agent</button>
           {!canDelete && <p className="field-note">Create another agent before deleting the last one.</p>}
@@ -193,6 +196,32 @@ function DeleteBotDialog({ bot, choices, client, onClose, onDeleted }) {
   </section></div>
 }
 
+function RewindDialog({ message, busy, error, onClose, onConfirm }) {
+  const dialog = useRef(null)
+  useEffect(() => {
+    const previous = document.activeElement
+    const element = dialog.current
+    element?.querySelector('button')?.focus()
+    const onKey = event => {
+      if (event.key === 'Escape' && !busy) { event.preventDefault(); onClose() }
+      if (event.key !== 'Tab') return
+      const items = [...element.querySelectorAll('button:not([disabled])')]
+      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)?.focus() }
+      else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0]?.focus() }
+    }
+    element?.addEventListener('keydown', onKey)
+    return () => { element?.removeEventListener('keydown', onKey); if (previous?.isConnected) previous.focus() }
+  }, [busy, onClose])
+  return <div className="rewind-overlay"><section className="rewind-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby="rewind-title">
+    <h2 id="rewind-title">Rewind this message?</h2>
+    <p>This removes this message and every message after it from the chat, then loads the prompt back into compose.</p>
+    <blockquote>{message.prompt}</blockquote>
+    <p className="rewind-note">Saved memories and files are not deleted or undone.</p>
+    {error && <p role="alert" className="delete-agent-error">{error}</p>}
+    <div className="delete-agent-actions"><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="rewind-confirm" onClick={onConfirm} disabled={busy}>{busy ? 'Rewinding…' : 'Rewind chat'}</button></div>
+  </section></div>
+}
+
 function App() {
   const [page, setPage] = useState(() => window.location.hash === '#usage' ? 'usage' : 'chat')
   const [botClient] = useState(createBrowserBotClient)
@@ -212,6 +241,9 @@ function App() {
   const [editing, setEditing] = useState(null)
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState('')
+  const [rewindTarget, setRewindTarget] = useState(null)
+  const [rewindBusy, setRewindBusy] = useState(false)
+  const [rewindError, setRewindError] = useState('')
   const [deleteId, setDeleteId] = useState(null)
   const [status, setStatus] = useState({})
   const saveError = syncError || botClient.migrationError
@@ -219,6 +251,7 @@ function App() {
   const followTranscript = useRef(true)
   const bot = bots.find(item => item.id === activeId) || { id: 'loading', name: 'Loading bots…', description: '', ...normalizeRuntime() }
   const draft = drafts[bot.id] || ''
+  const autoPreview = bot.mode === 'auto' && draft.trim() ? routeAutoPrompt(bot.provider, draft) : null
   const history = chatState.histories[bot.id]
   const requests = (history?.requests || []).map(request => ({ ...request, preview: request.prompt.slice(0, 160), serverId: request.id, modelLabel: runtimes[request.provider]?.models.find(model => model.id === request.model)?.label || request.model }))
   const activeRequest = requests.find(request => request.status === 'running')
@@ -226,7 +259,7 @@ function App() {
   const thread = requests.flatMap(request => [{ kind: 'user', text: request.prompt, requestId: request.id, editedAt: request.promptEditedAt }, {
     kind: ['failed', 'cancelled', 'interrupted'].includes(request.status) ? 'error' : 'bot',
     text: request.text || request.error || '', error: request.text ? request.error : null,
-    runtime: request.modelLabel + ' · ' + request.effort, requestId: request.id, editedAt: request.responseEditedAt,
+    runtime: request.modelLabel + ' · ' + request.effort + ' · ' + modeDisplay(request.requestedMode, request.mode), requestId: request.id, editedAt: request.responseEditedAt,
   }])
   const tokenSummary = summarizeRequests(requests)
   const label = runtimes[bot.provider].models.find(model => model.id === bot.model)?.label
@@ -284,11 +317,11 @@ function App() {
   const createBot = () => {
     showChat()
     const id = 'bot-' + [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, '0')).join('')
-    botClient.create({ id, name: 'New bot', description: '', ...normalizeRuntime(bot) })
+    botClient.create({ id, name: 'New bot', description: '', ...normalizeRuntime(bot), mode: bot.mode })
     setActiveId(id); setSendError(''); setQuery(''); setView('settings')
     if (narrow) setMobilePanel('details'); else setDetailsOpen(true)
   }
-  const selectBot = id => { setActiveId(id); setSendError(''); setEditing(null); setPreviewDraft(false); followTranscript.current = true; showChat() }
+  const selectBot = id => { setActiveId(id); setSendError(''); setEditing(null); setRewindTarget(null); setPreviewDraft(false); followTranscript.current = true; showChat() }
   const toggleDetails = () => { if (narrow) setMobilePanel('details'); else setDetailsOpen(open => !open) }
   const closeDetails = () => { setDetailsOpen(false); setMobilePanel(null) }
   const sendMessage = async () => {
@@ -312,6 +345,16 @@ function App() {
     try { await chatClient.editMessage(bot.id, editing.id, editing.role, value, editing.expectedText); setEditing(null) }
     catch (error) { setEditError(error.message) }
     finally { setEditBusy(false) }
+  }
+  const rewindMessage = async () => {
+    if (!rewindTarget || rewindBusy) return
+    setRewindBusy(true); setRewindError('')
+    try {
+      await chatClient.rewindMessage(bot.id, rewindTarget.id, rewindTarget.prompt)
+      setDrafts(current => ({ ...current, [bot.id]: rewindTarget.prompt }))
+      setRewindTarget(null); setPreviewDraft(false); setEditing(null); followTranscript.current = true
+    } catch (error) { setRewindError(error.message) }
+    finally { setRewindBusy(false) }
   }
   const openDelete = id => { setDeleteId(id); setMobilePanel(null) }
   const deleteBot = async options => {
@@ -351,7 +394,7 @@ function App() {
                 </div> : <Markdown text={message.text} />}
                 {message.editedAt && <span className="message-edited">Edited</span>}
                 {message.error && <p>{message.error}</p>}
-                {request && message.kind !== 'error' && <div className="message-foot"><button className="message-token-note" onClick={showLog} title="Provider-reported counts from the original run. Request input includes system and tool context.">{request.status === 'running' ? 'Token counts pending…' : message.kind === 'user' ? `${tokenCount(request.usage?.inputTokens)} request input tokens` : `${tokenCount(request.usage?.outputTokens)} output tokens · ${tokenCount(request.usage?.totalTokens)} total`}</button>{request.status !== 'running' && (message.kind === 'user' || request.status === 'complete') && <button className="message-edit-button" aria-label={`Edit ${message.kind === 'user' ? 'message' : 'reply'}`} onClick={() => { setEditing({ id: message.requestId, role: message.kind === 'user' ? 'user' : 'assistant', value: message.text, expectedText: message.text }); setEditError('') }}><Pencil size={13} /> Edit</button>}</div>}
+                {request && message.kind !== 'error' && <div className="message-foot"><button className="message-token-note" onClick={showLog} title="Provider-reported counts from the original run. Request input includes system and tool context.">{request.status === 'running' ? 'Token counts pending…' : message.kind === 'user' ? `${tokenCount(request.usage?.inputTokens)} request input tokens` : `${tokenCount(request.usage?.outputTokens)} output tokens · ${tokenCount(request.usage?.totalTokens)} total`}</button><span className="message-actions">{request.status !== 'running' && (message.kind === 'user' || request.status === 'complete') && <button className="message-edit-button" aria-label={`Edit ${message.kind === 'user' ? 'message' : 'reply'}`} onClick={() => { setEditing({ id: message.requestId, role: message.kind === 'user' ? 'user' : 'assistant', value: message.text, expectedText: message.text }); setEditError('') }}><Pencil size={13} /> Edit</button>}{request.status !== 'running' && message.kind === 'user' && <button className="message-edit-button" aria-label="Rewind to this message" onClick={() => { setRewindTarget({ id: message.requestId, prompt: message.text }); setRewindError('') }}><RotateCcw size={13} /> Rewind</button>}</span></div>}
               </div>}
             </div>
           })}
@@ -363,9 +406,11 @@ function App() {
         <div className="composer">
           <div className="composer-format"><span>Markdown supported</span><button type="button" aria-pressed={previewDraft} onClick={() => setPreviewDraft(value => !value)}>{previewDraft ? 'Edit message' : 'Preview'}</button></div>
           {previewDraft ? <div className="composer-preview" role="region" aria-label="Message preview">{draft.trim() ? <Markdown text={draft} /> : <p className="quiet">Nothing to preview yet.</p>}</div> : <textarea aria-label={'Message ' + (bot.name || 'bot')} placeholder={'Message ' + (bot.name || 'bot')} rows={2} maxLength={9000} value={draft} onChange={event => setDrafts(current => ({ ...current, [bot.id]: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage() } }} />}
-          <div className="composer-toolbar"><ModelSelect compact bot={bot} onChange={update} label="Chat model" /><div className="composer-actions"><EffortPicker modelLabel={label} effort={bot.effort} steps={effortSteps(bot.provider, bot.model)} onChange={effort => update({ effort })} /><Button className="send-button" aria-label="Send message" size="icon" onClick={sendMessage} disabled={!draft.trim() || Boolean(running) || Boolean(sending) || !history?.ready}><ArrowUp /></Button></div></div>
+          {autoPreview && <div className="auto-route-preview" role="status"><span><strong>Auto plans {autoPreview.mode === 'agent' ? 'Agent' : 'Chat first'}</strong><small>{autoPreview.reason}</small></span><button type="button" title={`Turn off Auto and always use ${autoPreview.mode === 'agent' ? 'Agent' : 'Chat'} mode`} onClick={() => update({ mode: autoPreview.mode })}>Use {autoPreview.mode === 'agent' ? 'Agent' : 'Chat'}</button></div>}
+          <div className="composer-toolbar"><div className="composer-runtime"><ModePicker compact provider={bot.provider} mode={bot.mode} onChange={mode => update({ mode })} /><ModelSelect compact bot={bot} onChange={update} label="Chat model" /></div><div className="composer-actions"><EffortPicker modelLabel={label} effort={bot.effort} steps={effortSteps(bot.provider, bot.model)} onChange={effort => update({ effort })} /><Button className="send-button" aria-label="Send message" size="icon" onClick={sendMessage} disabled={!draft.trim() || Boolean(running) || Boolean(sending) || !history?.ready}><ArrowUp /></Button></div></div>
         </div>
-        <p className="composer-note">{runtimes[bot.provider].label} · {status?.[bot.provider]?.connected ? bot.provider === 'ollama' ? 'Connected to the Pi' : 'Connected on this Mac' : 'Check connection in Details'}</p>
+        <p className="composer-note">{runtimes[bot.provider].label} · {status?.[bot.provider]?.connected ? bot.provider === 'ollama' ? 'Connected to the Pi' : 'Connected on this Mac' : 'Check connection in Settings'}</p>
+        <p className="composer-mode-note">{modeNote(bot.provider, bot.mode)}</p>
         <div className="composer-debug"><button onClick={showLog}><Activity size={11} />{tokenSummary.totals.totalTokens.partial && tokenSummary.totals.totalTokens.value !== null ? '≥ ' : ''}{tokenCount(tokenSummary.totals.totalTokens.value)} {history?.hasMore ? 'loaded-history' : 'conversation'} tokens · View log</button></div>
         {saveError && <p role="alert">{saveError} <button onClick={() => void botClient.sync()}>Retry</button></p>}
         {!saveError && saving && <p className="composer-note" role="status">Saving bot settings…</p>}
@@ -375,6 +420,7 @@ function App() {
     {page === 'chat' && !narrow && detailsOpen && <aside className="desktop-details"><Details key={bot.id} {...detailsProps} /></aside>}
     {narrow && mobilePanel && <div className="drawer-layer"><button className="drawer-backdrop" aria-label="Dismiss panel" onClick={() => setMobilePanel(null)} /><aside id="mobile-panel" role="dialog" aria-modal="true" aria-label={mobilePanel === 'sidebar' ? 'Bots' : 'Agent sidebar'} className={'mobile-drawer ' + mobilePanel}>{mobilePanel === 'sidebar' ? <Sidebar {...sidebarProps} onClose={() => setMobilePanel(null)} /> : <Details key={bot.id} {...detailsProps} />}</aside></div>}
     {deleteId && bots.some(item => item.id === deleteId) && <DeleteBotDialog key={deleteId} bot={bots.find(item => item.id === deleteId)} choices={bots.filter(item => item.id !== deleteId)} client={chatClient} onClose={() => setDeleteId(null)} onDeleted={deleteBot} />}
+    {rewindTarget && <RewindDialog key={rewindTarget.id} message={rewindTarget} busy={rewindBusy} error={rewindError} onClose={() => setRewindTarget(null)} onConfirm={rewindMessage} />}
   </main></AvatarProvider>
 }
 export default App

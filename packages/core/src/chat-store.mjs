@@ -3,6 +3,7 @@ import { mkdirSync, chmodSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { workspacePath } from './bot-store.mjs'
 import { validId } from '@bunji/shared/bots'
+import { normalizeMode, runtimes, supportedModes } from '@bunji/shared/runtimes'
 import { displayText } from './run-events.mjs'
 
 const MAX_PROMPT = 12000, MAX_TEXT = 1000000, MAX_ACTIVITIES = 150
@@ -10,6 +11,7 @@ const terminal = new Set(['complete', 'failed', 'cancelled', 'interrupted'])
 const activityKinds = new Set(['tool', 'reasoning', 'plan', 'notice'])
 const activityStatuses = new Set(['running', 'complete', 'failed', 'unknown', 'cancelled', 'interrupted'])
 const tokenFields = ['inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens', 'reasoningOutputTokens', 'totalTokens']
+const textMetricFields = ['characters', 'utf8Bytes', 'words', 'estimatedTokens']
 const fail = (message, status = 400) => Object.assign(new Error(message), { status })
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
@@ -47,16 +49,43 @@ function startValue(value) {
   identifier(id); identifier(botId, 'bot')
   text(prompt, MAX_PROMPT, 'Prompt')
   if (!prompt.trim()) throw fail('Prompt must not be empty.')
-  if (!['codex', 'claude', 'ollama'].includes(provider)) throw fail('Invalid provider.')
+  if (!Object.hasOwn(runtimes, provider)) throw fail('Invalid provider.')
   // Runtime support belongs to the coordinator. Persist bounded metadata without
   // tying old request retries to a model catalog that can change over time.
   if (typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]{0,127}$/.test(model)) throw fail('Invalid model.')
   if (!['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(effort)) throw fail('Invalid effort.')
+  if (value.requestedMode !== undefined && !supportedModes(provider).includes(value.requestedMode)) throw fail('That requested mode is not supported by this provider.')
+  const mode = value.mode === undefined ? normalizeMode(provider) : value.mode
+  if (!['chat', 'agent'].includes(mode)) throw fail('A request must resolve to Chat or Agent mode.')
+  const requestedMode = value.requestedMode ?? mode
+  const modeReason = value.modeReason === undefined || value.modeReason === null ? null : displayText(text(value.modeReason, 320, 'Mode reason'))
   const memoryWrite = value.memoryWrite === undefined ? false : value.memoryWrite
   if (typeof memoryWrite !== 'boolean') throw fail('Memory write must be a boolean.')
-  return { id, botId, prompt, provider, model, effort, memoryWrite,
+  return { id, botId, prompt, provider, model, effort, requestedMode, mode, modeReason, memoryWrite,
     contextTurns: count(value.contextTurns ?? 0, 'Context turns'),
     omittedTurns: count(value.omittedTurns ?? 0, 'Omitted turns') }
+}
+
+function textMetrics(value, label) {
+  if (!object(value)) throw fail(`Invalid ${label}.`)
+  return Object.fromEntries(textMetricFields.map(field => [field, count(value[field], `${label} ${field}`)]))
+}
+
+function usageBreakdownValue(value) {
+  if (value === undefined || value === null) return null
+  if (!object(value) || value.version !== 1 || !['role-messages', 'combined-prompt'].includes(value.payloadMode)
+    || value.estimator !== 'utf8-bytes-divided-by-4') throw fail('Invalid usage breakdown.')
+  const harness = value.providerHarnessUnknown
+  if (!object(harness) || !['pending', 'estimated', 'unavailable'].includes(harness.status)) throw fail('Invalid provider harness attribution.')
+  const estimatedTokens = harness.estimatedTokens === null ? null : count(harness.estimatedTokens, 'Provider harness estimatedTokens')
+  if (harness.status === 'estimated' && estimatedTokens === null) throw fail('Estimated provider harness tokens are required.')
+  if (harness.status !== 'estimated' && estimatedTokens !== null) throw fail('Unavailable provider harness tokens must be null.')
+  const reason = harness.reason === null ? null : displayText(text(harness.reason, 256, 'Provider harness reason'))
+  const bunjiContext = textMetrics(value.bunjiContext, 'Bunji context')
+  bunjiContext.historyTurns = count(value.bunjiContext.historyTurns, 'Bunji context historyTurns')
+  return { version: 1, estimator: value.estimator, payloadMode: value.payloadMode,
+    userMessage: textMetrics(value.userMessage, 'User message'), bunjiContext,
+    providerHarnessUnknown: { estimatedTokens, status: harness.status, reason } }
 }
 
 function usageValue(value) {
@@ -107,11 +136,17 @@ function mergeActivity(activities, value) {
 }
 
 const settleActivities = activities => activities.map(item => item.status === 'running' ? { ...item, status: 'unknown' } : item)
+const settleUsageBreakdown = breakdown => breakdown?.providerHarnessUnknown?.status === 'pending' ? {
+  ...breakdown,
+  providerHarnessUnknown: { estimatedTokens: null, status: 'unavailable', reason: 'Provider input tokens were unavailable.' },
+} : breakdown
 const requestValue = row => ({
   id: row.id, prompt: row.prompt, provider: row.provider, model: row.model, effort: row.effort,
+  requestedMode: row.requested_mode, mode: row.mode, modeReason: row.mode_reason,
   memoryWrite: row.memory_write === 1,
   startedAt: row.started_at, status: row.status, text: row.text,
   activities: JSON.parse(row.activities), usage: row.usage === null ? null : JSON.parse(row.usage),
+  usageBreakdown: row.usage_breakdown === null ? null : JSON.parse(row.usage_breakdown),
   durationMs: row.duration_ms, error: row.error, contextTurns: row.context_turns, omittedTurns: row.omitted_turns,
   promptEditedAt: row.prompt_edited_at ?? null, responseEditedAt: row.response_edited_at ?? null,
 })
@@ -135,12 +170,16 @@ export function openChatStore({ path = workspacePath() } = {}) {
         provider TEXT NOT NULL,
         model TEXT NOT NULL,
         effort TEXT NOT NULL,
+        requested_mode TEXT NOT NULL DEFAULT 'agent' CHECK(requested_mode IN ('auto','chat','agent')),
+        mode TEXT NOT NULL DEFAULT 'agent' CHECK(mode IN ('chat','agent')),
+        mode_reason TEXT,
         memory_write INTEGER NOT NULL DEFAULT 0 CHECK(memory_write IN (0,1)),
         started_at INTEGER NOT NULL,
         status TEXT NOT NULL CHECK(status IN ('running','complete','failed','cancelled','interrupted')),
         text TEXT NOT NULL DEFAULT '',
         activities TEXT NOT NULL DEFAULT '[]',
         usage TEXT,
+        usage_breakdown TEXT,
         duration_ms INTEGER,
         error TEXT,
         context_turns INTEGER NOT NULL,
@@ -151,8 +190,18 @@ export function openChatStore({ path = workspacePath() } = {}) {
       CREATE UNIQUE INDEX IF NOT EXISTS chat_requests_running ON chat_requests(bot_id) WHERE status='running';
       CREATE TABLE IF NOT EXISTS chat_revisions (bot_id TEXT PRIMARY KEY, revision INTEGER NOT NULL);`)
     const columns = new Set(db.prepare('PRAGMA table_info(chat_requests)').all().map(column => column.name))
+    if (!columns.has('mode')) {
+      db.exec("ALTER TABLE chat_requests ADD COLUMN mode TEXT NOT NULL DEFAULT 'agent' CHECK(mode IN ('chat','agent'))")
+      db.exec("UPDATE chat_requests SET mode='chat' WHERE provider IN ('openrouter','ollama')")
+    }
+    if (!columns.has('requested_mode')) {
+      db.exec("ALTER TABLE chat_requests ADD COLUMN requested_mode TEXT NOT NULL DEFAULT 'agent' CHECK(requested_mode IN ('auto','chat','agent'))")
+      db.exec('UPDATE chat_requests SET requested_mode=mode')
+    }
+    if (!columns.has('mode_reason')) db.exec('ALTER TABLE chat_requests ADD COLUMN mode_reason TEXT')
     if (!columns.has('prompt_edited_at')) db.exec('ALTER TABLE chat_requests ADD COLUMN prompt_edited_at INTEGER')
     if (!columns.has('response_edited_at')) db.exec('ALTER TABLE chat_requests ADD COLUMN response_edited_at INTEGER')
+    if (!columns.has('usage_breakdown')) db.exec('ALTER TABLE chat_requests ADD COLUMN usage_breakdown TEXT')
   } catch (error) { db.close(); throw error }
 
   const transaction = (action, write = true) => {
@@ -169,8 +218,9 @@ export function openChatStore({ path = workspacePath() } = {}) {
   const bump = botId => db.prepare('INSERT INTO chat_revisions(bot_id,revision) VALUES(?,1) ON CONFLICT(bot_id) DO UPDATE SET revision=revision+1').run(botId)
   const revision = botId => db.prepare('SELECT revision FROM chat_revisions WHERE bot_id=?').get(botId)?.revision ?? 0
   const save = (row, request) => {
-    db.prepare(`UPDATE chat_requests SET status=?,text=?,activities=?,usage=?,duration_ms=?,error=?,context_turns=?,omitted_turns=? WHERE id=?`)
-      .run(request.status, request.text, JSON.stringify(request.activities), request.usage === null ? null : JSON.stringify(request.usage),
+    db.prepare(`UPDATE chat_requests SET requested_mode=?,mode=?,mode_reason=?,memory_write=?,status=?,text=?,activities=?,usage=?,usage_breakdown=?,duration_ms=?,error=?,context_turns=?,omitted_turns=? WHERE id=?`)
+      .run(request.requestedMode, request.mode, request.modeReason, request.memoryWrite ? 1 : 0, request.status, request.text, JSON.stringify(request.activities),
+        request.usage === null ? null : JSON.stringify(request.usage), request.usageBreakdown === null ? null : JSON.stringify(request.usageBreakdown),
         request.durationMs, request.error, request.contextTurns, request.omittedTurns, row.id)
     bump(row.bot_id)
     return request
@@ -191,16 +241,24 @@ export function openChatStore({ path = workspacePath() } = {}) {
       }, false)
     },
     start(value) {
-      const input = startValue(value), payload = JSON.stringify(input)
+      const input = startValue(value), payload = JSON.stringify(input), usageBreakdown = usageBreakdownValue(value.usageBreakdown)
       return transaction(() => {
         const existing = rowFor(input.id)
         if (existing) {
-          if (existing.start_payload !== payload) throw fail('That request ID is already in use with a different payload.', 409)
+          let original = existing.start_payload
+          if (original !== payload) {
+            // Mode predates some saved requests. Normalize their immutable
+            // payload on comparison so a safe retry after migration stays idempotent.
+            try { original = JSON.stringify(startValue(JSON.parse(original))) } catch { /* Preserve the strict mismatch below. */ }
+          }
+          if (original !== payload) throw fail('That request ID is already in use with a different payload.', 409)
           return { request: requestValue(existing), created: false }
         }
         if (db.prepare("SELECT 1 FROM chat_requests WHERE bot_id=? AND status='running'").get(input.botId)) throw fail('A request is already running for this bot.', 409)
-        db.prepare(`INSERT INTO chat_requests(id,bot_id,start_payload,prompt,provider,model,effort,memory_write,started_at,status,context_turns,omitted_turns)
-          VALUES(?,?,?,?,?,?,?,?,?,'running',?,?)`).run(input.id, input.botId, payload, input.prompt, input.provider, input.model, input.effort, input.memoryWrite ? 1 : 0, Date.now(), input.contextTurns, input.omittedTurns)
+        db.prepare(`INSERT INTO chat_requests(id,bot_id,start_payload,prompt,provider,model,effort,requested_mode,mode,mode_reason,memory_write,started_at,status,context_turns,omitted_turns,usage_breakdown)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?, 'running',?,?,?)`).run(input.id, input.botId, payload, input.prompt, input.provider, input.model, input.effort,
+          input.requestedMode, input.mode, input.modeReason, input.memoryWrite ? 1 : 0, Date.now(), input.contextTurns, input.omittedTurns,
+          usageBreakdown === null ? null : JSON.stringify(usageBreakdown))
         bump(input.botId)
         return { request: requestValue(rowFor(input.id)), created: true }
       })
@@ -215,6 +273,15 @@ export function openChatStore({ path = workspacePath() } = {}) {
         return save(row, { ...request, activities })
       })
     },
+    route(id, { mode, reason }) {
+      if (!['chat', 'agent'].includes(mode)) throw fail('Invalid resolved mode.')
+      const modeReason = displayText(text(reason, 320, 'Mode reason'))
+      return transaction(() => {
+        const row = requireRow(id), request = requestValue(row)
+        if (request.status !== 'running') return request
+        return save(row, { ...request, mode, modeReason, memoryWrite: mode === 'agent' })
+      })
+    },
     finish(id, patch = {}) {
       if (!object(patch)) throw fail('Invalid finish patch.')
       return transaction(() => {
@@ -225,6 +292,7 @@ export function openChatStore({ path = workspacePath() } = {}) {
         const next = { ...request, status, activities: [...request.activities] }
         if (patch.text !== undefined) next.text = text(patch.text, MAX_TEXT, 'Response')
         if (patch.usage !== undefined) next.usage = usageValue(patch.usage)
+        if (patch.usageBreakdown !== undefined) next.usageBreakdown = usageBreakdownValue(patch.usageBreakdown)
         next.durationMs = patch.durationMs === undefined ? Math.max(0, Date.now() - request.startedAt) : count(patch.durationMs, 'Duration')
         if (patch.error !== undefined) next.error = patch.error === null ? null : displayText(text(patch.error, MAX_PROMPT, 'Error'))
         if (patch.contextTurns !== undefined) next.contextTurns = count(patch.contextTurns, 'Context turns')
@@ -236,6 +304,7 @@ export function openChatStore({ path = workspacePath() } = {}) {
         if (status !== 'complete' && !next.error) next.error = status === 'cancelled' ? 'Request stopped.'
           : status === 'interrupted' ? 'Request was interrupted before completion.' : 'Provider request failed.'
         next.activities = settleActivities(next.activities)
+        next.usageBreakdown = settleUsageBreakdown(next.usageBreakdown)
         // Explicit columns above are the only mutable fields. Runtime result
         // metadata (ok, failed, requestId, etc.) cannot alter request identity.
         return save(row, next)
@@ -265,6 +334,23 @@ export function openChatStore({ path = workspacePath() } = {}) {
         return requestValue(rowFor(id))
       })
     },
+    rewind(botId, id, { expectedPrompt } = {}) {
+      identifier(botId, 'bot'); identifier(id)
+      text(expectedPrompt, MAX_PROMPT, 'Expected prompt')
+      if (!expectedPrompt?.trim()) throw fail('Expected prompt must not be empty.')
+      return transaction(() => {
+        const row = requireRow(id)
+        if (row.bot_id !== botId) throw fail('Message not found for this bot.', 404)
+        if (row.status === 'running' || db.prepare("SELECT 1 FROM chat_requests WHERE bot_id=? AND status='running'").get(botId)) {
+          throw fail('Wait for this request to finish before rewinding.', 409)
+        }
+        if (row.prompt !== expectedPrompt) throw fail('Message changed on another device. Reload and review it before rewinding.', 409)
+        const removed = db.prepare('SELECT COUNT(*) AS count FROM chat_requests WHERE bot_id=? AND seq>=?').get(botId, row.seq).count
+        db.prepare('DELETE FROM chat_requests WHERE bot_id=? AND seq>=?').run(botId, row.seq)
+        bump(botId)
+        return { id, botId, prompt: row.prompt, removed }
+      })
+    },
     recoverInterrupted() {
       return transaction(() => {
         const rows = db.prepare("SELECT * FROM chat_requests WHERE status='running' ORDER BY seq").all()
@@ -273,7 +359,7 @@ export function openChatStore({ path = workspacePath() } = {}) {
           save(row, { ...request, status: 'interrupted',
             error: 'Request was interrupted by a restart before completion. It was not retried.',
             durationMs: request.durationMs ?? Math.max(0, Date.now() - request.startedAt),
-            activities: settleActivities(request.activities) })
+            activities: settleActivities(request.activities), usageBreakdown: settleUsageBreakdown(request.usageBreakdown) })
         }
         return rows.length
       })

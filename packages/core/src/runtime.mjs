@@ -1,13 +1,17 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { runtimes, effortSteps } from '@bunji/shared/runtimes'
+import { runtimes, effortSteps, normalizeMode, supportedModes } from '@bunji/shared/runtimes'
 import { runStream } from './run-stream.mjs'
+import { readOpenRouterCredential, runOpenRouter } from './openrouter.mjs'
+import { bunjiCodexProfileArgs } from './codex-profile.mjs'
+import { createCodexAppServer } from './codex-app-server.mjs'
+import { openCodexSessionStore } from './codex-session-store.mjs'
 
 const exec = promisify(execFile)
-export { runtimes, effortSteps, normalizeRuntime } from '@bunji/shared/runtimes'
+export { runtimes, effortSteps, normalizeMode, normalizeRuntime } from '@bunji/shared/runtimes'
 export { createUsageReader } from './usage.mjs'
 export const MAX_PROMPT_LENGTH = 12000
 const DEFAULT_OLLAMA_URL = 'http://192.168.68.78:11434'
@@ -28,7 +32,7 @@ function ollamaUsage(final) {
     source: 'Ollama response' }
 }
 
-async function runOllama({ model, effort, prompt }, { signal, onActivity } = {}) {
+async function runOllama({ model, effort, prompt }, { signal, onActivity, messages } = {}) {
   const startedAt = Date.now()
   const activities = []
   const activity = { id: 'ollama-pi', kind: 'notice', title: 'Ollama · Raspberry Pi', status: 'running', text: 'Waiting for the Pi…' }
@@ -37,7 +41,7 @@ async function runOllama({ model, effort, prompt }, { signal, onActivity } = {})
   try {
     const response = await fetch(ollamaUrl() + '/api/chat', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], stream: true, think: model.startsWith('qwen3:') && effort !== 'low', keep_alive: '10m' }),
+      body: JSON.stringify({ model, messages: Array.isArray(messages) ? messages : [{ role: 'user', content: prompt }], stream: true, think: model.startsWith('qwen3:') && effort !== 'low', keep_alive: '10m' }),
       signal,
     })
     if (!response.ok) {
@@ -98,6 +102,10 @@ export async function providerStatus(provider) {
       const result = JSON.parse(stdout)
       return { connected: Boolean(result.loggedIn), plan: result.subscriptionType || 'Claude subscription' }
     }
+    if (provider === 'openrouter') {
+      const credential = await readOpenRouterCredential()
+      return credential ? { connected: true, plan: credential.source === 'keychain' ? 'API key · macOS Keychain' : 'API key · environment' } : { connected: false, plan: 'Add an API key in Usage' }
+    }
     await exec('codex', ['login', 'status'], { timeout: 15000, maxBuffer: 65536 })
     return { connected: true, plan: 'ChatGPT subscription' }
   } catch { return { connected: false, plan: 'Sign in on this Mac' } }
@@ -122,11 +130,51 @@ export function computerExecution(computer) {
   throw new Error('This bot has an invalid computer permission level.')
 }
 
-export function providerCommand({ provider, model, effort, prompt }, { memory, computer, files } = {}) {
+const chatDisabledFeatures = [
+  'apps', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'computer_use',
+  'fast_mode', 'goals', 'hooks', 'image_generation', 'in_app_browser', 'in_app_chat', 'in_app_dictation',
+  'in_app_local_automation', 'memories', 'multi_agent', 'plugin_sharing', 'plugins', 'realtime_conversation',
+  'remote_plugin', 'shell_snapshot', 'shell_snapshot_v2', 'shell_tool', 'skill_search', 'sleep_tool',
+  'tool_call_mcp_elicitation', 'tool_search_always_defer_mcp_tools', 'tool_suggest', 'unified_exec', 'view_image',
+  'workspace_dependencies', 'worktrees',
+]
+
+function chatTranscript(messages, fallback) {
+  if (!Array.isArray(messages)) return { system: '', prompt: fallback }
+  const system = messages.filter(message => message?.role === 'system').map(message => message.content).join('\n\n')
+  const conversation = messages.filter(message => message?.role !== 'system')
+  if (conversation.length === 1 && conversation[0].role === 'user') return { system, prompt: conversation[0].content }
+  const current = conversation.at(-1)
+  const previous = conversation.slice(0, -1)
+  return { system, prompt: `${previous.length ? `Previous conversation (JSON, oldest first):\n${JSON.stringify(previous)}\n\n` : ''}Current user message:\n${current?.content || fallback}` }
+}
+
+export function providerCommand({ provider, model, effort, prompt, mode: requestedMode }, { memory, computer, files, messages } = {}) {
   if (!Object.hasOwn(runtimes, provider)) throw new Error('Unknown provider')
   if (!runtimes[provider].models.some(item => item.id === model)) throw new Error('Unsupported model')
   if (!effortSteps(provider, model).includes(effort)) throw new Error('Effort is not supported by this model')
   if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > MAX_PROMPT_LENGTH) throw new Error('Prompt is empty or too long')
+  if (requestedMode !== undefined && !supportedModes(provider).includes(requestedMode)) throw new Error('That mode is not supported by this provider')
+  const mode = normalizeMode(provider, requestedMode)
+  if (mode === 'auto') throw new Error('Auto mode must be resolved to Chat or Agent before provider execution')
+  if (mode === 'chat') {
+    const chat = chatTranscript(messages, prompt)
+    if (provider === 'ollama') return ['ollama-http', [model]]
+    if (provider === 'openrouter') return ['openrouter-http', [model]]
+    if (provider === 'claude') return ['claude', [
+      '--print', chat.prompt, '--model', model, '--effort', effort,
+      '--output-format', 'stream-json', '--verbose', '--no-session-persistence',
+      '--safe-mode', '--disable-slash-commands', '--tools', '', '--strict-mcp-config',
+      ...(chat.system ? ['--system-prompt', chat.system] : []),
+    ]]
+    return ['codex', [
+      'exec', '--ephemeral', '--skip-git-repo-check', '--sandbox', 'read-only', '--cd', tmpdir(),
+      '--ignore-user-config', '--ignore-rules', '-c', 'project_doc_max_bytes=0', '-c', 'mcp_servers={}',
+      ...chatDisabledFeatures.flatMap(feature => ['--disable', feature]),
+      '--model', model, '-c', `model_reasoning_effort="${effort}"`, '-c', 'model_reasoning_summary="none"',
+      '--color', 'never', '--json', prompt,
+    ]]
+  }
   const bridge = memory ? {
     command: process.execPath,
     args: [fileURLToPath(new URL('./memory-mcp.mjs', import.meta.url)), '--directory', memory.directory, '--bot', memory.botId, '--source', memory.sourceId, ...(memory.allowWrites ? ['--write'] : []), ...(files ? ['--files-db', files.path, '--files-computer', JSON.stringify(computer), '--files-cwd', files.cwd] : [])],
@@ -134,6 +182,7 @@ export function providerCommand({ provider, model, effort, prompt }, { memory, c
   const tools = ['memory_search', 'memory_read', ...(memory?.allowWrites ? ['memory_write', 'memory_link'] : []), ...(files ? ['files_publish'] : [])]
   const machine = computerExecution(computer)
   if (provider === 'ollama') return ['ollama-http', [model]]
+  if (provider === 'openrouter') return ['openrouter-http', [model]]
   // Claude's CLI has permission modes but no OS sandbox equivalent to Codex's
   // workspace-write boundary. Do not misrepresent an advisory --add-dir as a
   // safe machine boundary. Bunji will add Claude computer access through its
@@ -151,6 +200,7 @@ export function providerCommand({ provider, model, effort, prompt }, { memory, c
   ]]
   return ['codex', [
     'exec', '--ephemeral', '--skip-git-repo-check', '--sandbox', machine.sandbox,
+    ...bunjiCodexProfileArgs(),
     ...(computer?.scope === 'machine' ? ['-c', 'approval_policy="never"'] : []),
     ...(machine.cwd ? ['--cd', machine.cwd] : []),
     '--model', model, '-c', `model_reasoning_effort="${effort}"`, '-c', 'model_reasoning_summary="detailed"',
@@ -169,14 +219,48 @@ export function providerCommand({ provider, model, effort, prompt }, { memory, c
 // The shared service and stateless one-shot CLI use this same provider adapter.
 // MCP scope is trusted server configuration, never accepted from public run JSON.
 export async function runProvider(options, { requestId = randomUUID(), memory, computer, files, ...hooks } = {}) {
-  const machine = computerExecution(computer)
+  const mode = normalizeMode(options.provider, options.mode)
+  if (options.mode !== undefined && !supportedModes(options.provider).includes(options.mode)) throw new Error('That mode is not supported by this provider')
+  if (mode === 'auto') throw new Error('Auto mode must be resolved to Chat or Agent before provider execution')
+  const machine = mode === 'agent' ? computerExecution(computer) : computerExecution()
   if (options.provider === 'ollama') {
     const startedAt = Date.now()
     const result = await runOllama(options, hooks)
     return { ...result, ok: !result.failed, requestId, durationMs: result.durationMs ?? Date.now() - startedAt }
   }
-  const [command, args] = providerCommand(options, { memory, computer, files })
+  if (options.provider === 'openrouter') {
+    const startedAt = Date.now()
+    const result = await runOpenRouter(options, hooks)
+    return { ...result, ok: !result.failed, requestId, durationMs: result.durationMs ?? Date.now() - startedAt }
+  }
+  if (options.provider === 'codex' && mode === 'agent' && hooks.codexAppServer && hooks.session) {
+    try {
+      const result = await hooks.codexAppServer.run(options, { requestId, memory, computer, files, ...hooks }, machine)
+      return { ...result, ok: !result.failed, requestId, durationMs: result.durationMs }
+    } catch (error) {
+      if (!error?.safeToFallback) throw error
+      hooks.onActivity?.({ id: 'codex-session-fallback', kind: 'notice', title: 'Codex session', status: 'failed', text: 'Experimental persistent session unavailable. Bunji used a one-shot Codex run for this message.' })
+    }
+  }
+  const [command, args] = providerCommand(options, { memory, computer, files, messages: hooks.messages })
   const startedAt = Date.now()
-  const result = await runStream(command, args, { ...hooks, provider: options.provider, cwd: machine.cwd || undefined })
+  const result = await runStream(command, args, { ...hooks, provider: options.provider, cwd: mode === 'chat' ? tmpdir() : machine.cwd || undefined })
   return { ...result, ok: !result.failed, requestId, durationMs: Date.now() - startedAt }
+}
+
+export function createProviderRunner({ experimental = false, sessions, appServer } = {}) {
+  if (!experimental) return { sessions: null, run: runProvider, async close() {} }
+  const store = sessions || openCodexSessionStore()
+  const server = appServer || createCodexAppServer({ sessions: store })
+  let closed = false
+  return {
+    sessions: store,
+    run(options, hooks = {}) { return runProvider(options, { ...hooks, codexAppServer: server }) },
+    async close() {
+      if (closed) return
+      closed = true
+      await server.close()
+      store.close()
+    },
+  }
 }

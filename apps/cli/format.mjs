@@ -3,6 +3,7 @@ import { markedTerminal } from 'marked-terminal'
 import stripAnsi from 'strip-ansi'
 import wrapAnsi from 'wrap-ansi'
 import sliceAnsi from 'slice-ansi'
+import { modeDisplay } from '@bunji/shared/runtimes'
 
 // Model/tool output must not be allowed to move the cursor, rewrite the title,
 // set the clipboard, or emit terminal control sequences.
@@ -55,7 +56,7 @@ export function transcriptLines(bot, requests, width) {
   ]
   return requests.flatMap((request, index) => [
     `YOU  ·  ${index + 1}`, ...markdownLines(request.prompt, width), '',
-    `${safeText(bot.name).toUpperCase()}  ·  ${safeText(request.model)}  ·  ${request.effort}`,
+    `${safeText(bot.name).toUpperCase()}  ·  ${safeText(request.model)}  ·  ${request.effort}  ·  ${modeDisplay(request.requestedMode || bot.mode, request.mode).toUpperCase()}`,
     ...(request.text ? markdownLines(request.text, width) : [request.status === 'running' ? 'Working…' : '']),
     ...(request.error ? plainLines(request.error, width) : []),
     `${request.activities.filter(item => item.kind === 'tool').length} tool calls · ${statusLabel(request.status)} · ${count(request.usage?.totalTokens)} tokens`,
@@ -73,7 +74,7 @@ export function tokenLines(requests, width) {
     ...plainLines('Cumulative usage, not context size. Cache reads are already included in input.', width), '',
     ...[...requests].reverse().flatMap((request, index) => [
       `Request ${requests.length - index} · ${statusLabel(request.status)}`,
-      ...plainLines(request.model + ' · ' + request.effort, width),
+      ...plainLines(request.model + ' · ' + request.effort + ' · ' + modeDisplay(request.requestedMode, request.mode), width),
       `Input       ${count(request.usage?.inputTokens)}`,
       `Output      ${count(request.usage?.outputTokens)}`,
       `Cache read  ${count(request.usage?.cachedInputTokens)}`,

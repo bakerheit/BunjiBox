@@ -12,9 +12,11 @@
 .usage-provider-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; align-items:start; }
 .usage-provider { min-width:0; padding:24px; background:#151515; border:1px solid #2b2b2b; border-radius:22px; --usage-accent:#8facff; }
 .usage-provider.claude { --usage-accent:#dba58c; }
+.usage-provider.openrouter { --usage-accent:#b7f34a; }
 .usage-provider-heading { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .usage-provider-icon { display:grid; place-items:center; width:40px; height:40px; background:#292f3d; color:#b1c3fa; border-radius:12px; font-size:23px; font-weight:500; flex-shrink:0; }
 .claude .usage-provider-icon { color:#e3b49e; background:#392b24; font-size:30px; }
+.openrouter .usage-provider-icon { color:#c9f878; background:#29351b; font-size:12px; font-weight:700; letter-spacing:-.4px; }
 .usage-provider-heading h2 { font-weight:500; font-size:17px; }
 .usage-provider-heading p { color:#929292; font-size:11px; margin-top:3px; }
 .usage-badge { display:flex; align-items:center; gap:6px; font-size:10px; color:#a1a1a1; background:#242424; padding:6px 8px; border-radius:99px; margin-left:auto; }
@@ -42,6 +44,22 @@
 .usage-command input { font-family:ui-monospace,SFMono-Regular,monospace; font-size:11px; color:#ddd; background:none; border:0; width:100%; min-width:0; }
 .usage-command button { display:flex; align-items:center; gap:4px; color:#aaa; font-size:10px; flex-shrink:0; min-height:26px; }
 .usage-login p { font-size:10px; color:#8b8b8b; line-height:1.6; margin-top:10px; }
+.openrouter-key { padding:16px; margin-top:22px; border-radius:13px; border:1px solid #333; background:#1c1c1c; }
+.openrouter-key>label,.openrouter-key.connected>div:first-child { display:flex; align-items:center; gap:9px; color:#c9c9c9; }
+.openrouter-key label>span,.openrouter-key.connected span { display:grid; gap:3px; }
+.openrouter-key strong { font-size:11px; font-weight:500; }
+.openrouter-key small { color:#858585; font-size:9px; line-height:1.45; }
+.openrouter-key-input { display:flex; gap:7px; margin-top:13px; }
+.openrouter-key-input input { min-width:0; flex:1; border:1px solid #373737; border-radius:9px; background:#0e0e0e; color:#eee; padding:10px 11px; font:11px ui-monospace,SFMono-Regular,monospace; }
+.openrouter-key-input input:focus { outline:1px solid #789932; border-color:#789932; }
+.openrouter-key-input button,.openrouter-key-actions button { min-height:36px; border-radius:9px; background:#e7e7e7; color:#111; padding:0 12px; font-size:10px; font-weight:600; }
+.openrouter-key-input button:disabled { opacity:.5; }
+.openrouter-key>p { color:#e4a98f; font-size:10px; line-height:1.5; margin-top:10px; }
+.openrouter-key-cancel { color:#999; font-size:10px; margin-top:11px; }
+.openrouter-key.connected { display:flex; justify-content:space-between; align-items:center; gap:14px; }
+.openrouter-key-actions { display:flex; gap:6px; flex-shrink:0; }
+.openrouter-key-actions button { min-height:32px; background:#303030; color:#ccc; }
+.openrouter-key-actions .remove { display:flex; align-items:center; gap:5px; color:#e0a59e; }
 .usage-provider-footer { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:10px; margin-top:26px; padding-top:18px; border-top:1px solid #292929; font-size:10px; color:#7f7f7f; }
 .usage-provider-footer a { display:flex; align-items:center; gap:2px; color:#b3b3b3; }
 .usage-provider-footer a:hover { color:#fff; }
@@ -58,5 +76,5 @@
 @keyframes usage-spin { to { transform:rotate(360deg); } }
 @keyframes usage-pulse { to { opacity:.45; } }
 @media(max-width:1150px) { .usage-provider-grid { grid-template-columns:1fr; } .usage-content { max-width:800px; padding:36px 28px; } }
-@media(max-width:767px) { .usage-content { padding:28px 16px max(30px,env(safe-area-inset-bottom)); } .usage-title { align-items:flex-start; flex-wrap:wrap; gap:18px; margin-bottom:22px; } .usage-title h1 { font-size:32px; } .usage-title p { font-size:13px; } .usage-provider { padding:20px; border-radius:20px; } .usage-provider-grid { gap:16px; } .usage-refresh { min-height:44px; } .usage-command button { min-height:32px; } }
+@media(max-width:767px) { .usage-content { padding:28px 16px max(30px,env(safe-area-inset-bottom)); } .usage-title { align-items:flex-start; flex-wrap:wrap; gap:18px; margin-bottom:22px; } .usage-title h1 { font-size:32px; } .usage-title p { font-size:13px; } .usage-provider { padding:20px; border-radius:20px; } .usage-provider-grid { gap:16px; } .usage-refresh { min-height:44px; } .usage-command button { min-height:32px; } .openrouter-key.connected { align-items:flex-start; flex-direction:column; } .openrouter-key-actions { width:100%; } .openrouter-key-actions button { flex:1; min-height:40px; } }
 @media(prefers-reduced-motion:reduce) { .usage-spinning,.usage-loading>div { animation:none; } .usage-meter>span { transition:none; } }

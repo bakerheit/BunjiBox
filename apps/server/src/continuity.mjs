@@ -13,8 +13,9 @@ export function createContinuityRoutes({ service, chats, memory }) {
   return async (request, response) => {
     const url = new URL(request.url, 'http://localhost')
     const bot = /^\/api\/bots\/([a-zA-Z0-9_-]+)\/(history|messages|memory)(?:\/([a-zA-Z0-9_-]+))?$/.exec(url.pathname)
+    const rewind = /^\/api\/bots\/([a-zA-Z0-9_-]+)\/rewind$/.exec(url.pathname)
     const run = /^\/api\/runs\/([a-zA-Z0-9_-]+)(\/cancel)?$/.exec(url.pathname)
-    if (!bot && !run) return false
+    if (!bot && !rewind && !run) return false
     try {
       if (request.method !== 'GET' && request.headers.origin && new URL(request.headers.origin).host !== request.headers.host) throw fail('Cross-origin changes are not allowed.', 403)
       let result, status = 200
@@ -22,6 +23,10 @@ export function createContinuityRoutes({ service, chats, memory }) {
         if (request.method === 'POST' && run[2]) { await jsonBody(request); result = service.cancel(run[1]) }
         else if (request.method === 'GET' && !run[2]) { result = { request: chats.get(run[1]) }; if (!result.request) throw fail('Request not found.', 404) }
         else throw fail('Unsupported run operation.', 405)
+      } else if (rewind) {
+        if (request.method !== 'POST') throw fail('Unsupported rewind operation.', 405)
+        const body = await jsonBody(request)
+        result = { rewind: service.rewind(rewind[1], body) }
       } else {
         const [, botId, action, noteId] = bot
         service.botFor(botId)
@@ -30,7 +35,7 @@ export function createContinuityRoutes({ service, chats, memory }) {
         else if (action === 'messages' && noteId && request.method === 'PATCH') {
           const edit = await jsonBody(request)
           if (!edit || typeof edit !== 'object' || Array.isArray(edit) || Object.keys(edit).some(key => !['role', 'value', 'expectedText'].includes(key))) throw fail('Invalid message edit.')
-          result = { request: chats.editMessage(botId, noteId, edit) }
+          result = { request: service.editMessage(botId, noteId, edit) }
         }
         else if (action === 'memory') {
           if (request.method === 'GET') result = noteId ? { note: await memory.read(botId, noteId) } : url.searchParams.has('q') ? await memory.search(botId, { query: url.searchParams.get('q') }) : await memory.list(botId)

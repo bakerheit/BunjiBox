@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
-import { runProvider, providerStatus, createUsageReader, normalizeRuntime, MAX_PROMPT_LENGTH } from '@bunji/core/runtime'
+import { runProvider, providerStatus, createUsageReader, normalizeRuntime, runtimes, MAX_PROMPT_LENGTH } from '@bunji/core/runtime'
+import { routeAutoPrompt } from '@bunji/core/mode-router'
 import { defaultBots as sharedDefaults, cliBot, cliChanges, makeBot, patchBot } from '@bunji/shared/bots'
 
 export const defaultBots = () => sharedDefaults().map(cliBot)
@@ -76,10 +77,10 @@ export class BunjiSession extends EventEmitter {
   }
   addBot(name) {
     if (this.botClient) {
-      const bot = makeBot({ id: randomUUID(), name: name.slice(0, 60) || 'New bot', ...normalizeRuntime(this.bot) })
+      const bot = makeBot({ id: randomUUID(), name: name.slice(0, 60) || 'New bot', ...normalizeRuntime(this.bot), mode: this.bot.mode })
       this.activeId = bot.id; this.botClient.create(bot); return
     }
-    const bot = cliBot(makeBot({ id: randomUUID(), name: name.slice(0, 60) || 'New bot', ...normalizeRuntime(this.bot) }))
+    const bot = cliBot(makeBot({ id: randomUUID(), name: name.slice(0, 60) || 'New bot', ...normalizeRuntime(this.bot), mode: this.bot.mode }))
     this.bots.push(bot); this.turns.set(bot.id, []); this.activeId = bot.id; this.changed()
   }
   async connect() {
@@ -95,7 +96,7 @@ export class BunjiSession extends EventEmitter {
       this.backgroundPolling.unref?.()
     }
     const [entries] = await Promise.all([
-      Promise.all(['claude', 'codex', 'ollama'].map(async provider => [provider, await this.status(provider)])),
+      Promise.all(Object.keys(runtimes).map(async provider => [provider, await this.status(provider)])),
       this.chatClient?.refresh(this.activeId),
     ])
     if (this.disposed) return
@@ -129,7 +130,7 @@ export class BunjiSession extends EventEmitter {
       await this.botClient?.flush()
       if (this.botClient?.getSnapshot().pending) throw new Error(this.botClient.getSnapshot().error || 'Bot settings have not been saved yet.')
       if (this.disposed) throw Object.assign(new Error('Detached from shared chat.'), { code: 'BUNJI_DETACHED' })
-      const accepted = await this.chatClient.send(bot.id, text, { provider: bot.provider, model: bot.model, effort: bot.effort })
+      const accepted = await this.chatClient.send(bot.id, text, { provider: bot.provider, model: bot.model, effort: bot.effort, mode: bot.mode })
       if (this.disposed) throw Object.assign(new Error('Detached from shared chat. The run continues on the service.'), { code: 'BUNJI_DETACHED' })
       pending.request = accepted
       const current = this.turns.get(bot.id) || []
@@ -172,13 +173,17 @@ export class BunjiSession extends EventEmitter {
     if (!text.trim()) return
     if (this.chatClient) return this.sendShared(text, options)
     const bot = { ...this.bot }, previous = this.turns.get(bot.id)
+    const route = bot.mode === 'auto' ? routeAutoPrompt(bot.provider, text) : { mode: bot.mode, reason: `${bot.mode} mode was selected.` }
+    const resolvedBot = { ...bot, mode: route.mode }
     const context = conversationPrompt(bot, previous, text)
-    const request = { id: randomUUID(), prompt: text, preview: text.slice(0, 160), provider: bot.provider, model: bot.model, effort: bot.effort, startedAt: Date.now(), status: 'running', text: '', activities: [], usage: null, contextTurns: context.contextTurns, omittedTurns: context.omittedTurns }
+    const request = { id: randomUUID(), prompt: text, preview: text.slice(0, 160), provider: bot.provider, model: bot.model, effort: bot.effort,
+      requestedMode: bot.mode, mode: route.mode, modeReason: route.reason, startedAt: Date.now(), status: 'running', text: '', activities: [], usage: null,
+      contextTurns: context.contextTurns, omittedTurns: context.omittedTurns }
     previous.push(request)
     const controller = new AbortController()
     this.directBusy = { botId: bot.id, request, controller }; this.changed()
     try {
-      const result = await this.run({ ...bot, prompt: context.prompt }, { signal: controller.signal, requestId: request.id, computer: bot.computer, onActivity: activity => {
+      const result = await this.run({ ...resolvedBot, prompt: context.prompt }, { signal: controller.signal, requestId: request.id, ...(route.mode === 'agent' ? { computer: bot.computer } : {}), onActivity: activity => {
         const index = request.activities.findIndex(item => item.id === activity.id)
         if (index < 0) request.activities.push(activity)
         else request.activities[index] = activity

@@ -10,7 +10,7 @@ export const workspaceDirectory = () => process.env.BUNJI_DATA_DIR || join(proce
 export const workspacePath = () => join(workspaceDirectory(), 'workspace.sqlite')
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const fail = (message, status = 400) => Object.assign(new Error(message), { status })
-const botFields = ['id', 'name', 'description', 'provider', 'model', 'effort', 'avatar', 'computer']
+const botFields = ['id', 'name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer']
 const patchFields = botFields.filter(field => field !== 'id')
 const machineConfirmationRequired = () => { throw fail('Full-machine access must be enabled in Computer access settings.', 409) }
 const folderConfirmationRequired = () => { throw fail('Folder access must be enabled in Computer access settings.', 409) }

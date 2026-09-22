@@ -1,11 +1,36 @@
 import { Activity, ArrowLeft, ChevronsRight, Clock3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { summarizeRequests, tokenCount } from '@bunji/shared/token-usage'
+import { modeDisplay } from '@bunji/shared/runtimes'
 import './TokenLog.css'
 import RunActivity from './RunActivity'
 
 function Total({ label, metric }) {
   return <div><dt>{label}</dt><dd>{metric.partial && metric.value !== null ? '≥ ' : ''}{tokenCount(metric.value)}</dd></div>
+}
+
+function EstimatedTokens({ value, pending = false }) {
+  if (!Number.isSafeInteger(value)) return <strong>{pending ? 'Pending' : 'Unavailable'}</strong>
+  return <strong>~{tokenCount(value)} tokens</strong>
+}
+
+const providerCount = value => Number.isSafeInteger(value) && value >= 0 ? tokenCount(value) : 'Unavailable'
+
+export function InputAttribution({ breakdown }) {
+  if (!breakdown) return <p className="token-missing">Input attribution is unavailable for this older request.</p>
+  const user = breakdown.userMessage
+  const context = breakdown.bunjiContext
+  const harness = breakdown.providerHarnessUnknown
+  const calls = Number.isSafeInteger(breakdown.calls) && breakdown.calls > 0 ? breakdown.calls : 1
+  return <section className="token-attribution" aria-label="Input attribution">
+    <div className="token-attribution-heading"><h3>Input attribution</h3><span>{calls > 1 ? `${calls} provider calls · ` : ''}~ means estimated</span></div>
+    <div className="token-attribution-grid">
+      <div><span>{calls > 1 ? 'Typed message payloads' : 'Typed message'}</span><EstimatedTokens value={user?.estimatedTokens} /><small>{tokenCount(user?.characters)} exact chars sent · {tokenCount(user?.words)} exact words sent</small></div>
+      <div><span>Bunji context &amp; history</span><EstimatedTokens value={context?.estimatedTokens} /><small>{tokenCount(context?.characters)} exact chars · {tokenCount(context?.historyTurns)} saved exchanges</small></div>
+      <div><span>Provider harness / unknown</span><EstimatedTokens value={harness?.estimatedTokens} pending={harness?.status === 'pending'} /><small>{harness?.reason || 'Waiting for exact provider input.'}</small></div>
+    </div>
+    <p>Local token sizes use UTF-8 bytes ÷ 4. Provider counts below are exact values reported by the provider.</p>
+  </section>
 }
 
 export default function TokenLog({ requests, botName, onClose, onBack, hasMore = false, compact = false }) {
@@ -20,18 +45,20 @@ export default function TokenLog({ requests, botName, onClose, onBack, hasMore =
         {!requests.length && <div className="token-empty"><Activity size={25} /><h3>No requests yet</h3><p>Send a message. Its input, output, and cache counts will appear here.</p></div>}
         {[...requests].reverse().map((request, index) => <article className="token-request" key={request.id}>
           <header><strong>Request {requests.length - index}</strong><span className={`token-request-status ${request.status}`}>{request.status === 'running' ? 'Running…' : request.status}</span></header>
-          <p className="token-runtime">{request.modelLabel} · {request.effort}</p>
+          <p className="token-runtime">{request.modelLabel} · {request.effort} · {modeDisplay(request.requestedMode, request.mode)}</p>
           <p className="token-prompt" title={request.preview}>{request.preview}</p>
-          {Number.isInteger(request.contextTurns) && <p className="token-missing">Context: {request.contextTurns} recent exchanges included · {request.omittedTurns} older exchanges omitted. Memory {request.memoryWrite ? 'writes enabled' : 'read-only'} for this request.</p>}
+          {Number.isInteger(request.contextTurns) && <p className="token-missing">Context: {request.contextTurns} recent exchanges included · {request.omittedTurns} older exchanges omitted. {request.mode === 'chat' ? 'Memory and machine tools unavailable for this Chat request.' : 'Memory writes enabled for this Agent request.'}{request.modeReason ? ` ${request.modeReason}` : ''}</p>}
           <RunActivity activities={request.activities} status={request.status} limited={request.activityLimited} />
-          <dl className="token-request-stats"><div><dt>Request input</dt><dd>{tokenCount(request.usage?.inputTokens)}</dd></div><div><dt>Response output</dt><dd>{tokenCount(request.usage?.outputTokens)}</dd></div><div><dt>Cache read <span>(in input)</span></dt><dd>{tokenCount(request.usage?.cachedInputTokens)}</dd></div>{request.provider === 'claude' && <div><dt>Cache write <span>(in input)</span></dt><dd>{tokenCount(request.usage?.cacheWriteTokens)}</dd></div>}<div className="token-request-total"><dt>Total tokens</dt><dd>{tokenCount(request.usage?.totalTokens)}</dd></div></dl>
+          <InputAttribution breakdown={request.usageBreakdown} />
+          <dl className="token-request-stats"><div><dt>Provider input</dt><dd>{providerCount(request.usage?.inputTokens)}</dd></div><div><dt>Provider output</dt><dd>{providerCount(request.usage?.outputTokens)}</dd></div><div><dt>Cache read <span>(included in input)</span></dt><dd>{providerCount(request.usage?.cachedInputTokens)}</dd></div><div><dt>Cache write <span>(included in input)</span></dt><dd>{providerCount(request.usage?.cacheWriteTokens)}</dd></div><div><dt>Reasoning output <span>(included in output)</span></dt><dd>{providerCount(request.usage?.reasoningOutputTokens)}</dd></div><div className="token-request-total"><dt>Provider total</dt><dd>{providerCount(request.usage?.totalTokens)}</dd></div></dl>
+          {request.usage?.source && <p className="token-provider-source">Exact source: {request.usage.source}</p>}
           {!request.usage && <p className="token-missing">{request.status === 'running' ? 'Waiting for provider counts…' : 'The provider did not return token counts. This is not zero usage.'}</p>}
           {request.error && <p className="token-request-error">{request.error}</p>}
           <footer><span><Clock3 size={11} />{new Date(request.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span><span>{typeof request.durationMs === 'number' ? `${(request.durationMs / 1000).toFixed(1)}s` : 'In progress'}</span></footer>
           {request.serverId && <code className="token-request-id" title={request.serverId}>{request.serverId}</code>}
         </article>)}
       </div>
-      <p className="token-footnote">Input includes provider/system instructions, bot description, recent chat, and tool context. Exact tokens for just the typed text are not separately reported. This log is saved on your Mac and shared across devices.</p>
+      <p className="token-footnote">Provider input can include system instructions, model harnesses, tools, and cached context that Bunji cannot inspect. Local text estimates explain the visible payload without pretending the remainder is exact. This log is saved on your Mac and shared across devices.</p>
     </div>
   </>
 }

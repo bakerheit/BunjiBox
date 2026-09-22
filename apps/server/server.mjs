@@ -1,5 +1,5 @@
 import http from 'node:http'
-import { createUsageReader, providerCommand, providerStatus, runProvider } from '@bunji/core/runtime'
+import { createProviderRunner, createUsageReader, providerCommand, providerStatus, runProvider, runtimes } from '@bunji/core/runtime'
 import { randomUUID, createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { openBotStore, workspaceDirectory } from '@bunji/core/bot-store'
@@ -12,6 +12,7 @@ import { acquireServiceLease } from '@bunji/core/service-lease'
 import { openFileStore } from '@bunji/core/file-store'
 import { createFileRoutes } from './src/files.mjs'
 import { recoverFileHistory } from '@bunji/core/file-history'
+import { createProviderRoutes } from './src/providers.mjs'
 
 const PORT = Number(process.env.BUNJI_API_PORT || 4318)
 // Coordinate by workspace, not only by port. Two service ports must not recover
@@ -24,10 +25,13 @@ const chatStore = openChatStore()
 const memoryDirectory = join(workspaceDirectory(), 'memory')
 const memoryStore = openMemoryStore({ directory: memoryDirectory })
 const fileStore = openFileStore()
-const chatService = createChatService({ bots: botStore, chats: chatStore, memoryDirectory, memory: memoryStore, files: fileStore })
+const providerRunner = createProviderRunner({ experimental: process.env.BUNJI_EXPERIMENTAL_CODEX_APP_SERVER === '1' })
+const chatService = createChatService({ bots: botStore, chats: chatStore, memoryDirectory, memory: memoryStore, files: fileStore,
+  sessions: providerRunner.sessions, run: providerRunner.run })
 const handleFiles = createFileRoutes({ service: chatService, files: fileStore })
 const handleBots = createBotRoutes(botStore, chatService)
 const handleContinuity = createContinuityRoutes({ service: chatService, chats: chatStore, memory: memoryStore })
+const handleProviders = createProviderRoutes()
 await Promise.all(botStore.list().bots.map(bot => recoverFileHistory({ bot, chats: chatStore, files: fileStore })))
 
 function sendJson(response, status, body) {
@@ -39,6 +43,7 @@ const server = http.createServer(async (request, response) => {
   if (await handleFiles(request, response)) return
   if (await handleContinuity(request, response)) return
   if (await handleBots(request, response)) return
+  if (await handleProviders(request, response)) return
   const url = new URL(request.url, `http://${request.headers.host}`)
 
   if (request.method === 'GET' && url.pathname === '/api/health') {
@@ -54,8 +59,9 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (request.method === 'GET' && url.pathname === '/api/status') {
-    const [claude, codex, ollama] = await Promise.all([providerStatus('claude'), providerStatus('codex'), providerStatus('ollama')])
-    sendJson(response, 200, { claude, codex, ollama })
+    const providers = Object.keys(runtimes)
+    const entries = await Promise.all(providers.map(async provider => [provider, await providerStatus(provider)]))
+    sendJson(response, 200, Object.fromEntries(entries))
     return
   }
 
@@ -113,6 +119,7 @@ async function shutdown() {
   stopping = true
   server.close()
   await chatService.close()
+  await providerRunner.close()
   fileStore.close(); chatStore.close(); botStore.close()
   serviceLease.release()
 }

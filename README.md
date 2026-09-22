@@ -1,6 +1,6 @@
 # BunjiBox
 
-BunjiBox is a local agent workbench for Claude, Codex, and a temporary Ollama endpoint. It uses the subscription-backed CLIs already signed in on the Mac, while Ollama can run on another trusted LAN device such as a Raspberry Pi.
+BunjiBox is a local agent workbench for Claude, Codex, OpenRouter, and a temporary Ollama endpoint. It uses the subscription-backed CLIs already signed in on the Mac, calls OpenRouter with a user-supplied API key, and can run Ollama on another trusted LAN device such as a Raspberry Pi.
 
 ## Repo layout
 
@@ -126,12 +126,13 @@ deliverables default to `outputs/<bot-id>/<request-id>/` in the Bunji data
 directory, or `.bunji/outputs/<bot-id>/<request-id>/` inside a selected folder.
 These output folders are checked while the agent works and when it finishes.
 Agents also get a `files_publish` tool to register files generated elsewhere,
-including shell output. Shell-created files outside the output folder need that
-tool call to appear; Bunji does not scan the whole machine.
+including shell output. Local Markdown download links in their replies are
+captured too. Files made elsewhere need a publish call or a reply attachment
+to appear; Bunji does not scan the whole machine.
 
 The index persists in the shared workspace and syncs to connected devices.
-Older completed file-write events with absolute paths are recovered when the
-service starts; old relative paths or truncated logs cannot be recovered reliably.
+Older completed file-write events and reply attachments with absolute paths are
+recovered when the service starts; old relative paths or truncated logs cannot be recovered reliably.
 The browser only serves registered file IDs. HTML and SVG are text previews,
 not executable pages. Files moved or removed outside Bunji are marked unavailable.
 Deleting an agent does not delete its created files from disk.
@@ -140,15 +141,27 @@ Deleting an agent does not delete its created files from disk.
 
 - Claude: Opus, Sonnet, or Haiku; low through max effort.
 - Codex: GPT-6 Astra, GPT-5.6 Sol, Terra, Luna, or GPT-5.5; model-specific effort options.
+- OpenRouter: the free-model or automatic router; low through high effort. Add or replace the API key on the Usage page. BunjiBox verifies it with OpenRouter and stores it in macOS Keychain, never browser storage.
 - Ollama · Pi: Gemma3 1B; the temporary connector runs it in chat mode.
-- Bot names, descriptions, avatars, provider, model, and effort persist in the
+- Bot names, descriptions, avatars, provider, model, effort, and default run mode persist in the
   shared workspace, not per-browser storage. Failed saves show a warning and retry.
 - Settings or the sidebar’s three-dot menu can delete an agent and its chat history. If it has memory notes,
   choose another agent to receive them or delete the notes. Linked notes are
   remapped during transfer. A running request must finish or be stopped first.
-- Shared chats always include Bunji's scoped memory tools. Codex keeps its
-  computer sandbox; Claude uses a restricted built-in tool set without shell
-  or edits while memory tools are available.
+- **Auto** is the default for new agents. Bunji routes obvious tool work directly
+  to Agent; other messages start in Chat and let the selected model request an
+  Agent handoff. The composer previews that choice and lets you override it.
+  Auto never expands the computer permissions already saved for that agent.
+- **Chat** mode is the lean path: Bunji memory, files, and computer tools are off.
+  OpenRouter and Ollama are Chat-only in this alpha. Codex Chat uses the signed-in
+  Codex CLI with user configuration, project instructions, skills, and tool features
+  disabled where the CLI permits; this is not ChatGPT consumer chat or API access.
+  Claude Chat uses the signed-in Claude Code CLI in safe mode with no tools.
+- **Agent** mode keeps Bunji's full harness. Codex keeps its computer sandbox;
+  Claude uses a restricted built-in tool set without shell or edits while memory
+  tools are available. Codex Agent runs use Bunji's lean profile, which skips
+  host plugins, apps, memories, hooks, and unrelated tool systems. Each saved
+  request records both the requested and resolved mode.
 - Each bot can also keep a shared computer profile: no computer, a selected
   folder, or This Mac full access. Selecting full access shows a confirmation
   modal; no device pairing is required. Folder changes run through Codex's
@@ -167,6 +180,17 @@ is needed.
 Run `codex login` or `claude auth login` to connect the corresponding provider.
 The app checks current login status; no account state is hard-coded.
 
+Codex Agent requests use one-shot CLI runs by default. Durable Codex app-server
+threads are experimental and Agent-only. To test them, start the API with
+`BUNJI_EXPERIMENTAL_CODEX_APP_SERVER=1 npm run api`. Chat stays stateless, and
+edits, rewinds, agent deletion, or a changed identity/computer policy invalidate
+the saved app-server thread before the next turn.
+
+OpenRouter uses its HTTPS chat-completions API. Add a key from the Usage page,
+or set `OPENROUTER_API_KEY` before starting the local service. Direct OpenRouter
+chat and token accounting work in this alpha; Bunji memory, computer, and file
+tools are not exposed to OpenRouter models yet.
+
 The temporary Ollama connector defaults to `http://192.168.68.78:11434`. Set
 `BUNJI_OLLAMA_URL` before starting BunjiBox to point it at another Ollama host.
 Keep that endpoint on a trusted network; BunjiBox does not add authentication to
@@ -183,7 +207,7 @@ Open the Memory tab in the agent sidebar to browse, create, edit, and follow lin
 notes. Memory lives in `~/.config/bunji/memory/<bot-id>/` (or your configured data
 directory), with stable `[[note-id|Title]]` links and source message IDs.
 
-Agents can search, read, and save useful notes in every shared chat. Just ask
+Agents can search, read, and save useful notes in Agent-mode shared chats. Just ask
 the agent to remember something, or let it capture a durable preference or
 decision when relevant. In Bunji, `/memory [search]`, `/recall <note-id>`, and
 `/older` help you browse history; `/remember <text>` still works as an alias.

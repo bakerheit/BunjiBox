@@ -49,3 +49,22 @@ test('the trusted folder is also the child process working directory', async () 
   assert.equal((await result).ok, true)
   assert.equal(launch.options.cwd, '/private/tmp/bunji-safe')
 })
+
+test('Chat mode removes Bunji and machine tools while Agent mode keeps the existing harness', () => {
+  const messages = [{ role: 'system', content: 'You are Chip2.' }, { role: 'user', content: 'Hello' }]
+  const [, codexChat] = providerCommand({ ...codex, mode: 'chat' }, { messages, computer: { scope: 'machine', level: 'auto', network: 'off' }, memory: { directory: '/tmp/nope', botId: 'chip2', sourceId: 'run', allowWrites: true } })
+  assert.ok(codexChat.includes('--ignore-user-config'))
+  assert.ok(codexChat.includes('--ignore-rules'))
+  assert.ok(codexChat.includes('project_doc_max_bytes=0'))
+  assert.ok(codexChat.includes('shell_tool'))
+  assert.equal(codexChat[codexChat.indexOf('--sandbox') + 1], 'read-only')
+  assert.ok(!codexChat.some(value => String(value).includes('bunji_memory')))
+  assert.ok(!codexChat.includes('danger-full-access'))
+
+  const [, claudeChat] = providerCommand({ ...codex, provider: 'claude', model: 'haiku', mode: 'chat' }, { messages })
+  assert.ok(claudeChat.includes('--safe-mode'))
+  assert.ok(claudeChat.includes('--disable-slash-commands'))
+  assert.equal(claudeChat[claudeChat.indexOf('--tools') + 1], '')
+  assert.equal(claudeChat[claudeChat.indexOf('--system-prompt') + 1], 'You are Chip2.')
+  assert.throws(() => providerCommand({ provider: 'openrouter', model: 'openrouter/free', effort: 'low', prompt: 'hello', mode: 'agent' }), /mode is not supported/)
+})

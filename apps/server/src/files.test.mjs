@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { openFileStore } from '@bunji/core/file-store'
 import { createFileRoutes } from './files.mjs'
 import { createRunEvents } from '@bunji/core/run-events'
-import { recoverFileHistory } from '@bunji/core/file-history'
+import { localFileLinks, recoverFileHistory } from '@bunji/core/file-history'
 import { openBotStore } from '@bunji/core/bot-store'
 import { openChatStore } from '@bunji/core/chat-store'
 import { createChatService } from '@bunji/core/chat-service'
@@ -104,25 +104,31 @@ test('shared runs index shell outputs, native edits and MCP-published files', as
       const response = await client.callTool({ name: 'files_publish', arguments: { path: 'generated.txt' } })
       assert.ok(!response.isError)
     } finally { await client.close(); await bridge.close() }
-    return { ok: true, text: 'Done' }
+    const linked = join(f.folder, 'linked output.txt'); await writeFile(linked, 'Linked shell output')
+    return { ok: true, text: `Done. [Download](<${linked}>)` }
   } })
   t.after(async () => { await service.close(); chats.close(); bots.close() })
   service.start('bunjibox', { id: 'run-files', prompt: 'Create files', provider: 'codex', model: 'gpt-5.6-luna', effort: 'low' })
   for (let i = 0; i < 100 && chats.get('run-files').status === 'running'; i++) await delay(10)
   assert.equal(chats.get('run-files').status, 'complete')
   assert.equal(observed.files.path, f.path)
-  assert.deepEqual((await f.files.list('bunjibox')).map(file => file.name).sort(), ['edited.js', 'generated.txt', 'shell-output.csv'])
+  assert.deepEqual((await f.files.list('bunjibox')).map(file => file.name).sort(), ['edited.js', 'generated.txt', 'linked output.txt', 'shell-output.csv'])
   assert.equal(await readFile(join(outputDirectory, 'shell-output.csv'), 'utf8'), 'a,b\n1,2')
 })
 
 test('history recovery uses completed absolute write paths and output scans ignore symlinks', async t => {
   const f = await fixture(t), bot = { id: 'alpha', computer: f.computer }
   const path = join(f.folder, 'prior.md'); await writeFile(path, 'prior')
-  const chats = { history: () => ({ hasMore: false, requests: [{ id: 'old-run', activities: [{ status: 'complete', title: 'File changes', input: JSON.stringify([{ path, kind: 'add' }, { path: 'relative.md', kind: 'add' }]) }] }] }) }
+  const linked = join(f.folder, 'spreadsheet.csv'); await writeFile(linked, 'a,b')
+  const chats = { history: () => ({ hasMore: false, requests: [{ id: 'old-run', text: `[Download](<${linked}>)`, activities: [{ status: 'complete', title: 'File changes', input: JSON.stringify([{ path, kind: 'add' }, { path: 'relative.md', kind: 'add' }]) }] }] }) }
   await recoverFileHistory({ bot, chats, files: f.files })
-  assert.equal((await f.files.list('alpha'))[0].name, 'prior.md')
+  assert.deepEqual((await f.files.list('alpha')).map(file => file.name).sort(), ['prior.md', 'spreadsheet.csv'])
   const output = f.files.outputDirectory(bot, 'new-run'); await f.files.prepare(output, f.computer)
   await symlink(path, join(output, 'link.md')); await writeFile(join(output, 'new.txt'), 'new')
   await f.files.scan(bot, 'new-run', output)
-  assert.deepEqual((await f.files.list('alpha')).map(file => file.name).sort(), ['new.txt', 'prior.md'])
+  assert.deepEqual((await f.files.list('alpha')).map(file => file.name).sort(), ['new.txt', 'prior.md', 'spreadsheet.csv'])
+})
+
+test('attachment recovery handles spaces and encoded paths but excludes remote and bare paths', () => {
+  assert.deepEqual(localFileLinks('[one](</tmp/My report.xlsx>) [two](/tmp/encoded%20name.csv) [three](file:///tmp/plot.png) [web](https://example.com/a.pdf) [remote](//example.com/a.pdf) [relative](./a.txt) Bare /tmp/private.txt'), ['/tmp/My report.xlsx', '/tmp/encoded name.csv', '/tmp/plot.png'])
 })

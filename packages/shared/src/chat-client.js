@@ -99,8 +99,8 @@ export class ChatClient {
       this.publishBot(botId, { histories: { ...this.state.histories, [botId]: { ...current, requests: [...page.requests.filter(item => !seen.has(item.id)), ...current.requests], hasMore: page.hasMore, nextBefore: page.nextBefore, expanded: true, loadingOlder: false } } })
     } catch (error) { this.publishBot(botId, { histories: { ...this.state.histories, [botId]: { ...this.state.histories[botId], loadingOlder: false } } }, error.message) }
   }
-  async send(botId, prompt, { provider, model, effort } = {}) {
-    const payload = { prompt, provider, model, effort, memoryWrite: true }
+  async send(botId, prompt, { provider, model, effort, mode } = {}) {
+    const payload = { prompt, provider, model, effort, mode, memoryWrite: mode !== 'chat' }
     const key = JSON.stringify([botId, payload])
     if (this.sending.has(key)) return this.sending.get(key)
     // randomUUID requires HTTPS in browsers; LAN phones use plain HTTP in alpha.
@@ -142,6 +142,15 @@ export class ChatClient {
       await this.refreshing.get(botId)
       await this.refresh(botId)
       return result.request
+    } catch (error) { throw forBot(error, botId) }
+  }
+  async rewindMessage(botId, id, expectedPrompt) {
+    try {
+      const result = await this.write(`/api/bots/${encodeURIComponent(botId)}/rewind`, { id, expectedPrompt })
+      if (result?.rewind?.id !== id || result.rewind.botId !== botId || typeof result.rewind.prompt !== 'string') throw ambiguousResponse()
+      await this.refreshing.get(botId)
+      await this.refresh(botId)
+      return result.rewind
     } catch (error) { throw forBot(error, botId) }
   }
   async memoryList(botId, query = '') { return this.request(`/api/bots/${encodeURIComponent(botId)}/memory${query ? '?q=' + encodeURIComponent(query) : ''}`) }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeCodexUsage, normalizeClaudeUsage, readCodexUsage, readClaudeUsage, createUsageReader } from '../src/usage.mjs'
+import { normalizeCodexUsage, normalizeClaudeUsage, readCodexUsage, readClaudeUsage, readOpenRouterUsage, createUsageReader } from '../src/usage.mjs'
 
 test('Codex uses the multi-limit map and labels durations, not assumed slot names', () => {
   const windows = normalizeCodexUsage({ rateLimits: { primary: { usedPercent: 99 } }, rateLimitsByLimitId: { codex: { primary: { usedPercent: 15, windowDurationMins: 10080, resetsAt: 1790430020 }, secondary: null }, other: { limitName: 'Other model', primary: { usedPercent: 0, windowDurationMins: 300 } } } })
@@ -105,12 +105,34 @@ test('Claude auth failures, rate limits, malformed data, and network errors stay
   assert.doesNotMatch(JSON.stringify(network), /PRIVATE_ERROR|TEST_SECRET/)
 })
 
+test('OpenRouter reports no key honestly and normalizes a key spend limit', async () => {
+  const signedOut = await readOpenRouterUsage({ credential: async () => null, inspect: () => assert.fail('must not inspect') })
+  assert.equal(signedOut.status, 'signed_out')
+  assert.equal(signedOut.connected, false)
+  const connected = await readOpenRouterUsage({ credential: async () => ({ key: 'PRIVATE', source: 'keychain' }), inspect: async key => {
+    assert.equal(key, 'PRIVATE')
+    return { usage: 5, limit: 20, limit_reset: 'monthly', is_free_tier: false, creator_user_id: 'PRIVATE_ACCOUNT' }
+  } })
+  assert.equal(connected.status, 'ok')
+  assert.equal(connected.windows[0].usedPercent, 25)
+  assert.equal(connected.credentialSource, 'keychain')
+  assert.doesNotMatch(JSON.stringify(connected), /PRIVATE/)
+})
+
+test('OpenRouter rejected keys stay unavailable without exposing credentials', async () => {
+  const result = await readOpenRouterUsage({ credential: async () => ({ key: 'PRIVATE', source: 'environment' }), inspect: async () => { throw new Error('OpenRouter rejected that API key.') } })
+  assert.equal(result.status, 'unavailable')
+  assert.equal(result.connected, true)
+  assert.match(result.message, /rejected/)
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE/)
+})
+
 test('Usage cache coalesces callers, refreshes after TTL, and throttles forced refreshes', async () => {
   let time = 100000
   let calls = 0
   let resolve
   const first = new Promise(done => { resolve = done })
-  const reader = createUsageReader({ now: () => time, codex: async () => { calls++; if (calls === 1) await first; return { status: 'ok' } }, claude: async () => ({ status: 'signed_out' }) })
+  const reader = createUsageReader({ now: () => time, codex: async () => { calls++; if (calls === 1) await first; return { status: 'ok' } }, claude: async () => ({ status: 'signed_out' }), openrouter: async () => ({ status: 'signed_out' }) })
   const a = reader()
   const b = reader({ refresh: true })
   resolve()

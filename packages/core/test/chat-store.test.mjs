@@ -56,7 +56,7 @@ test('full requests survive reconnect and a fresh process; values returned are d
   store.addActivity('persist', event)
   const response = 'Complete answer 🍋\n'.repeat(2000)
   const done = store.finish('persist', { text: response, usage, durationMs: 1234 })
-  assert.deepEqual(Object.keys(done).sort(), ['id', 'prompt', 'provider', 'model', 'effort', 'memoryWrite', 'startedAt', 'status', 'text', 'activities', 'usage', 'durationMs', 'error', 'contextTurns', 'omittedTurns', 'promptEditedAt', 'responseEditedAt'].sort())
+  assert.deepEqual(Object.keys(done).sort(), ['id', 'prompt', 'provider', 'model', 'effort', 'requestedMode', 'mode', 'modeReason', 'memoryWrite', 'startedAt', 'status', 'text', 'activities', 'usage', 'usageBreakdown', 'durationMs', 'error', 'contextTurns', 'omittedTurns', 'promptEditedAt', 'responseEditedAt'].sort())
   assert.equal(done.activities[0].at, Date.parse(event.at))
   assert.deepEqual(done.usage, usage)
   assert.equal(done.text, response)
@@ -105,6 +105,37 @@ test('opening a chat-only database creates separate tables and does not seed bot
   } finally { db.close() }
 })
 
+test('opening an older chat database assigns truthful modes without dropping history', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'bunji-chat-mode-migration-')), path = join(dir, 'workspace.sqlite')
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const db = new DatabaseSync(path)
+  db.exec(`CREATE TABLE chat_requests (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, bot_id TEXT NOT NULL, start_payload TEXT NOT NULL,
+    prompt TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, effort TEXT NOT NULL,
+    memory_write INTEGER NOT NULL DEFAULT 0, started_at INTEGER NOT NULL, status TEXT NOT NULL,
+    text TEXT NOT NULL DEFAULT '', activities TEXT NOT NULL DEFAULT '[]', usage TEXT, duration_ms INTEGER,
+    error TEXT, context_turns INTEGER NOT NULL, omitted_turns INTEGER NOT NULL);
+    CREATE TABLE chat_revisions (bot_id TEXT PRIMARY KEY, revision INTEGER NOT NULL);`)
+  const insert = db.prepare(`INSERT INTO chat_requests(id,bot_id,start_payload,prompt,provider,model,effort,memory_write,started_at,status,text,activities,context_turns,omitted_turns)
+    VALUES(?,?,?,?,?,?,?,?,?,'complete','Saved','[]',0,0)`)
+  const oldPayload = (id, provider, model) => JSON.stringify({ id, botId: 'bot', prompt: 'Hello', provider, model, effort: 'low', memoryWrite: true, contextTurns: 0, omittedTurns: 0 })
+  insert.run('old-codex', 'bot', oldPayload('old-codex', 'codex', 'gpt-5.6-luna'), 'Hello', 'codex', 'gpt-5.6-luna', 'low', 1, 1)
+  insert.run('old-router', 'bot', oldPayload('old-router', 'openrouter', 'openrouter/free'), 'Hello', 'openrouter', 'openrouter/free', 'low', 1, 2)
+  db.close()
+  const store = openChatStore({ path }); t.after(() => store.close())
+  assert.deepEqual(store.history('bot').requests.map(request => [request.id, request.mode]), [['old-codex', 'agent'], ['old-router', 'chat']])
+  assert.equal(store.start({ ...JSON.parse(oldPayload('old-codex', 'codex', 'gpt-5.6-luna')), mode: 'agent' }).created, false)
+  assert.equal(store.start({ ...JSON.parse(oldPayload('old-router', 'openrouter', 'openrouter/free')), mode: 'chat' }).created, false)
+})
+
+test('chat persistence accepts OpenRouter requests from the shared runtime catalog', t => {
+  const { store } = fixture(t)
+  const started = store.start(input('openrouter-request', 'bunjibox', { provider: 'openrouter', model: 'openrouter/free', effort: 'medium' }))
+  assert.equal(started.created, true)
+  assert.equal(started.request.provider, 'openrouter')
+  assert.equal(started.request.model, 'openrouter/free')
+})
+
 test('stable IDs are globally idempotent; changes conflict and terminal retries never rerun', t => {
   const { store, open } = fixture(t), peer = open(), original = input()
   const first = store.start(original)
@@ -135,6 +166,20 @@ test('message edits sync across stores, reject stale writes, and preserve measur
   assert.ok(reply.responseEditedAt)
   assert.equal(peer.recentCompleted('bunjibox')[0].text, 'Corrected reply')
   assert.equal(peer.start(original).created, false, 'original request ID remains safe to retry')
+})
+
+test('rewind removes the targeted turn and every later turn, while keeping the prompt recoverable', t => {
+  const { store } = fixture(t)
+  for (const [id, prompt] of [['first', 'First question'], ['second', 'Second question'], ['third', 'Third question']]) {
+    store.start(input(id, 'bunjibox', { prompt }))
+    store.finish(id, { text: `Reply to ${id}` })
+  }
+  assert.throws(() => store.rewind('bunjibox', 'second', { expectedPrompt: 'Stale question' }), isStatus(409))
+  const rewound = store.rewind('bunjibox', 'second', { expectedPrompt: 'Second question' })
+  assert.deepEqual(rewound, { id: 'second', botId: 'bunjibox', prompt: 'Second question', removed: 2 })
+  assert.deepEqual(store.history('bunjibox').requests.map(request => request.id), ['first'])
+  assert.equal(store.get('second'), null)
+  assert.equal(store.get('third'), null)
 })
 
 test('memory permission is explicit, idempotent, and immutable while context counts can finish later', t => {

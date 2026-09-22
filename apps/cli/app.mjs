@@ -222,7 +222,7 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
   if (panel === 'usage') sideLines = usageLines(session.usage, session.usageLoading, Math.max(1, sideWidth))
   if (panel === 'details') sideLines = [
     `${bot.shape} ${safeText(bot.name)}`, '', ...plainLines(bot.description || 'No description yet. Press E to edit.', Math.max(1, sideWidth)), '',
-    runtimes[bot.provider].label, bot.model, 'Effort · ' + bot.effort, '',
+    runtimes[bot.provider].label, bot.model, 'Effort · ' + bot.effort, 'Mode · ' + (bot.mode || 'agent'), '',
     session.connections[bot.provider]?.connected ? '● Signed in on this Mac' : '○ Sign-in needed',
     bot.provider === 'codex' ? 'codex login' : bot.provider === 'claude' ? 'claude auth login' : 'BUNJI_OLLAMA_URL · Pi Ollama endpoint', '',
     ...plainLines('Memory tools are available in every chat.', Math.max(1, sideWidth)), '', ...computerDetails(bot, sideWidth), '', 'Service working directory', ...plainLines(cwd, Math.max(1, sideWidth)), '',
@@ -399,7 +399,7 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
         h(Text, { dimColor: true }, 'Ctrl+N New bot'), h(Text, { dimColor: true }, 'Ctrl+U Usage')),
       h(Box, { width: centerWidth, flexDirection: 'column' },
         h(Pane, { title: panelOnly ? panel.toUpperCase() : `${bot.shape} ${safeText(bot.name)}${session.busy?.botId === bot.id ? '  ' + pulse + ' working' : ''}`, width: centerWidth, height: chatHeight, active: focus === 'chat' || panelOnly, color: bot.color }, h(Lines, { lines: panelOnly ? sideLines : chatLines, height: contentHeight, width: contentWidth, offset: panelOnly ? sideOffset : scroll.chat, fromBottom: !panelOnly })),
-        h(Box, { height: 1, justifyContent: 'space-between', paddingX: 1 }, h(Text, { color: bot.color, wrap: 'truncate' }, `${runtimes[bot.provider].models.find(model => model.id === bot.model)?.label} · ${bot.effort}`), h(Text, { dimColor: true, wrap: 'truncate' }, `${pending && measured ? '≥ ' : ''}${count(measured || !requests.length ? total : null)} tokens${session.chatClient ? ' (loaded)' : ''}`)),
+        h(Box, { height: 1, justifyContent: 'space-between', paddingX: 1 }, h(Text, { color: bot.color, wrap: 'truncate' }, `${runtimes[bot.provider].models.find(model => model.id === bot.model)?.label} · ${bot.effort} · ${bot.mode || 'agent'}`), h(Text, { dimColor: true, wrap: 'truncate' }, `${pending && measured ? '≥ ' : ''}${count(measured || !requests.length ? total : null)} tokens${session.chatClient ? ' (loaded)' : ''}`)),
         h(Pane, { title: 'MESSAGE  ·  Enter send  / commands', width: centerWidth, height: composeHeight, active: focus === 'input', color: bot.color }, h(Editor, { draft, cursor, width: contentWidth, height: composeHeight - 3, focused: focus === 'input' }))),
       panelWidth > 0 && h(Pane, { title: panel.toUpperCase() + ' · Tab to focus', width: panelWidth, height: bodyHeight, active: focus === 'panel', color: bot.color }, h(Lines, { lines: sideLines, height: sideHeight, width: sideWidth, offset: sideOffset }))),
     h(Text, { color: session.busy ? 'yellow' : 'gray', wrap: 'truncate' }, fit(' ' + (session.chatError ? safeText(session.chatError) : session.busy ? `${pulse} ${session.bots.find(item => item.id === session.busy.botId)?.name} working · Ctrl+X stop` : safeText(session.botClient?.getSnapshot().error || (session.botClient?.getSnapshot().pending ? 'Saving shared bot settings…' : notice))), width)),

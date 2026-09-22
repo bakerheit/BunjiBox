@@ -5,6 +5,7 @@ import { homedir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
+import { inspectOpenRouterKey, readOpenRouterCredential } from './openrouter.mjs'
 
 const execFileAsync = promisify(execFile)
 const finite = value => typeof value === 'number' && Number.isFinite(value)
@@ -58,7 +59,9 @@ export function normalizeClaudeUsage(payload = {}) {
 }
 
 function state(id, status, extras = {}) {
-  return { id, label: id === 'codex' ? 'Codex' : 'Claude', status, connected: status === 'signed_out' ? false : null, plan: null, windows: [], checkedAt: new Date().toISOString(), loginCommand: id === 'codex' ? 'codex login' : 'claude auth login', ...extras }
+  const labels = { codex: 'Codex', claude: 'Claude', openrouter: 'OpenRouter' }
+  const loginCommands = { codex: 'codex login', claude: 'claude auth login' }
+  return { id, label: labels[id] || id, status, connected: status === 'signed_out' ? false : null, plan: null, windows: [], checkedAt: new Date().toISOString(), loginCommand: loginCommands[id] || null, ...extras }
 }
 
 function openCodex() {
@@ -161,16 +164,35 @@ export async function readClaudeUsage({ auth = claudeAuth, credential = claudeCr
   }
 }
 
-export function createUsageReader({ codex = readCodexUsage, claude = readClaudeUsage, now = Date.now } = {}) {
+export async function readOpenRouterUsage({ credential = readOpenRouterCredential, inspect = inspectOpenRouterKey } = {}) {
+  let saved
+  try {
+    saved = await credential()
+    if (!saved?.key) return state('openrouter', 'signed_out', { message: 'Add an OpenRouter API key to use free or paid OpenRouter models.' })
+    const account = await inspect(saved.key)
+    const used = finite(account.usage) ? account.usage : null
+    const limit = finite(account.limit) && account.limit > 0 ? account.limit : null
+    const usedPercent = used !== null && limit !== null ? used / limit * 100 : null
+    const interval = typeof account.limit_reset === 'string' && account.limit_reset ? account.limit_reset : null
+    const windows = limit === null ? [] : [usageWindow('api-key-limit', `API key spend limit${interval ? ` · ${interval}` : ''}`, usedPercent, null)]
+    const tier = account.is_free_tier ? 'Free tier' : 'API key'
+    const message = windows.length ? null : used === null ? 'OpenRouter connected. This key did not report spend information.' : `OpenRouter connected · $${used.toFixed(2)} used by this key.`
+    return state('openrouter', 'ok', { connected: true, plan: tier, windows, credentialSource: saved.source, source: `OpenRouter API · ${saved.source === 'keychain' ? 'macOS Keychain' : 'environment variable'}`, message })
+  } catch (error) {
+    return state('openrouter', 'unavailable', { connected: saved?.key ? true : null, message: error.message === 'OpenRouter rejected that API key.' ? 'The saved OpenRouter key was rejected. Replace it below.' : 'Could not read OpenRouter account usage. The saved key was not exposed.' })
+  }
+}
+
+export function createUsageReader({ codex = readCodexUsage, claude = readClaudeUsage, openrouter = readOpenRouterUsage, now = Date.now } = {}) {
   let cache
   let cachedAt = 0
   let pending
   return async ({ refresh = false } = {}) => {
     if (pending) return pending
     if (cache && now() - cachedAt < (refresh ? 10000 : 60000)) return cache
-    pending = Promise.all([codex(), claude()]).then(([codex, claude]) => {
+    pending = Promise.all([codex(), claude(), openrouter()]).then(([codex, claude, openrouter]) => {
       cachedAt = now()
-      cache = { checkedAt: new Date(cachedAt).toISOString(), refreshAfterSeconds: 60, providers: { codex, claude } }
+      cache = { checkedAt: new Date(cachedAt).toISOString(), refreshAfterSeconds: 60, providers: { codex, claude, openrouter } }
       return cache
     }).finally(() => { pending = null })
     return pending
