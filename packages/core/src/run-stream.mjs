@@ -13,10 +13,11 @@ export function runStream(command, args, {
   stallTimeoutMs = Number.isFinite(configuredStallTimeout) && configuredStallTimeout > 0 ? configuredStallTimeout : 0,
   spawnProcess = spawn,
   cwd,
+  env = process.env,
 } = {}) {
   return new Promise(resolve => {
     const tracker = createRunEvents(provider, onActivity, onFile)
-    const child = spawnProcess(command, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], ...(cwd ? { cwd } : {}) })
+    const child = spawnProcess(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'], ...(cwd ? { cwd } : {}) })
     let buffer = '', received = 0, settled = false, forceKill, stallTimer
     const finish = error => {
       if (settled) return

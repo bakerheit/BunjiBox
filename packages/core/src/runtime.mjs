@@ -1,3 +1,4 @@
+import { nativeBridge, nativeTools, nativeInstructions } from './native-computer.mjs'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
@@ -149,7 +150,7 @@ function chatTranscript(messages, fallback) {
   return { system, prompt: `${previous.length ? `Previous conversation (JSON, oldest first):\n${JSON.stringify(previous)}\n\n` : ''}Current user message:\n${current?.content || fallback}` }
 }
 
-export function providerCommand({ provider, model, effort, prompt, mode: requestedMode }, { memory, computer, files, messages } = {}) {
+export function providerCommand({ provider, model, effort, prompt, mode: requestedMode }, { memory, computer, nativeComputer, files, messages } = {}) {
   if (!Object.hasOwn(runtimes, provider)) throw new Error('Unknown provider')
   if (!runtimes[provider].models.some(item => item.id === model)) throw new Error('Unsupported model')
   if (!effortSteps(provider, model).includes(effort)) throw new Error('Effort is not supported by this model')
@@ -175,6 +176,8 @@ export function providerCommand({ provider, model, effort, prompt, mode: request
       '--color', 'never', '--json', prompt,
     ]]
   }
+  const native = nativeBridge(nativeComputer, computer)
+  if (native) prompt += nativeInstructions
   const bridge = memory ? {
     command: process.execPath,
     args: [fileURLToPath(new URL('./memory-mcp.mjs', import.meta.url)), '--directory', memory.directory, '--bot', memory.botId, '--source', memory.sourceId, ...(memory.allowWrites ? ['--write'] : []), ...(files ? ['--files-db', files.path, '--files-computer', JSON.stringify(computer), '--files-cwd', files.cwd] : [])],
@@ -196,7 +199,7 @@ export function providerCommand({ provider, model, effort, prompt, mode: request
     // memory tools. A write-enabled turn instead has a narrow tool surface:
     // no shell, edits, agents, or other MCP servers, and deny unapproved calls.
     ...(computer?.scope === 'machine' ? ['--tools', 'default', '--strict-mcp-config'] : memory?.allowWrites ? ['--tools', 'Read,Glob,Grep,WebFetch,WebSearch,ToolSearch', '--strict-mcp-config'] : []),
-    ...(bridge ? ['--mcp-config', JSON.stringify({ mcpServers: { bunji_memory: bridge } }), '--allowedTools', tools.map(name => `mcp__bunji_memory__${name}`).join(',')] : []),
+    ...(bridge || native ? ['--mcp-config', JSON.stringify({ mcpServers: { ...(bridge ? { bunji_memory: bridge } : {}), ...(native ? { bunji_native: native } : {}) } }), '--allowedTools', [...(bridge ? tools.map(name => `mcp__bunji_memory__${name}`) : []), ...(native ? nativeTools.map(name => `mcp__bunji_native__${name}`) : [])].join(',')] : []),
   ]]
   return ['codex', [
     'exec', '--ephemeral', '--skip-git-repo-check', '--sandbox', machine.sandbox,
@@ -212,13 +215,14 @@ export function providerCommand({ provider, model, effort, prompt, mode: request
       '-c', `mcp_servers.bunji_memory.enabled_tools=${JSON.stringify(tools)}`,
       ...tools.flatMap(name => ['-c', `mcp_servers.bunji_memory.tools.${name}.approval_mode="approve"`, '-c', `mcp_servers.bunji_memory.tools.${name}.output_token_limit=4500`]),
     ] : []),
+    ...(native ? ['-c', `mcp_servers.bunji_native.command=${JSON.stringify(native.command)}`, '-c', `mcp_servers.bunji_native.args=${JSON.stringify(native.args)}`, '-c', 'mcp_servers.bunji_native.env.BUNJI_NATIVE_EXPERIMENT="1"', '-c', 'mcp_servers.bunji_native.required=true', '-c', 'mcp_servers.bunji_native.startup_timeout_sec=20', '-c', `mcp_servers.bunji_native.enabled_tools=${JSON.stringify(nativeTools)}`, ...nativeTools.flatMap(name => ['-c', `mcp_servers.bunji_native.tools.${name}.approval_mode="approve"`])] : []),
     '--color', 'never', '--json', prompt,
   ]]
 }
 
 // The shared service and stateless one-shot CLI use this same provider adapter.
 // MCP scope is trusted server configuration, never accepted from public run JSON.
-export async function runProvider(options, { requestId = randomUUID(), memory, computer, files, ...hooks } = {}) {
+export async function runProvider(options, { requestId = randomUUID(), memory, computer, nativeComputer, files, ...hooks } = {}) {
   const mode = normalizeMode(options.provider, options.mode)
   if (options.mode !== undefined && !supportedModes(options.provider).includes(options.mode)) throw new Error('That mode is not supported by this provider')
   if (mode === 'auto') throw new Error('Auto mode must be resolved to Chat or Agent before provider execution')
@@ -233,7 +237,7 @@ export async function runProvider(options, { requestId = randomUUID(), memory, c
     const result = await runOpenRouter(options, hooks)
     return { ...result, ok: !result.failed, requestId, durationMs: result.durationMs ?? Date.now() - startedAt }
   }
-  if (options.provider === 'codex' && mode === 'agent' && hooks.codexAppServer && hooks.session) {
+  if (options.provider === 'codex' && mode === 'agent' && hooks.codexAppServer && hooks.session && (!nativeComputer || nativeComputer === 'off')) {
     try {
       const result = await hooks.codexAppServer.run(options, { requestId, memory, computer, files, ...hooks }, machine)
       return { ...result, ok: !result.failed, requestId, durationMs: result.durationMs }
@@ -242,9 +246,9 @@ export async function runProvider(options, { requestId = randomUUID(), memory, c
       hooks.onActivity?.({ id: 'codex-session-fallback', kind: 'notice', title: 'Codex session', status: 'failed', text: 'Experimental persistent session unavailable. Bunji used a one-shot Codex run for this message.' })
     }
   }
-  const [command, args] = providerCommand(options, { memory, computer, files, messages: hooks.messages })
+  const [command, args] = providerCommand(options, { memory, computer, nativeComputer, files, messages: hooks.messages })
   const startedAt = Date.now()
-  const result = await runStream(command, args, { ...hooks, provider: options.provider, cwd: mode === 'chat' ? tmpdir() : machine.cwd || undefined })
+  const result = await runStream(command, args, { ...hooks, ...(mode === 'agent' && nativeComputer && nativeComputer !== 'off' && options.provider === 'claude' ? { env: { ...process.env, ENABLE_TOOL_SEARCH: 'false', ENABLE_CLAUDEAI_MCP_SERVERS: 'false' } } : {}), provider: options.provider, cwd: mode === 'chat' ? tmpdir() : machine.cwd || undefined })
   return { ...result, ok: !result.failed, requestId, durationMs: Date.now() - startedAt }
 }
 

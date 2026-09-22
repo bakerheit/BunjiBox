@@ -4,7 +4,7 @@ import { distinctAvatarShapes } from './avatars.js'
 export const colors = ['cyan', 'blue', 'magenta', 'green', 'yellow', 'red', 'white']
 export const colorValues = { cyan: '#00ad9c', blue: '#087ee7', magenta: '#8247e5', green: '#00a56a', yellow: '#ff9c00', red: '#ee1734', white: '#ffffff' }
 export const shapes = { hexagon: '⬡', circle: '●', square: '■', diamond: '◆', triangle: '▲', pebble: '●', pill: '▬', cloud: '☁', drop: '♦', ...Object.fromEntries(distinctAvatarShapes.map(shape => [shape.name, shape.glyph])) }
-const fields = ['name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer']
+const fields = ['name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer', 'nativeComputer']
 export const validId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id)
 const object = value => value && typeof value === 'object' && !Array.isArray(value)
 function text(value, max, label) {
@@ -38,13 +38,14 @@ export function computerValue(value = { scope: 'none', level: 'read', network: '
 
 export function makeBot(value) {
   if (!object(value) || !validId(value.id)) throw new Error('Invalid bot ID.')
+  if (value.nativeComputer !== undefined && !['off', 'fixture', 'com.apple.Notes'].includes(value.nativeComputer)) throw new Error('Unsupported native target.')
   const runtime = normalizeRuntime(value)
   if (value.provider !== undefined && !Object.hasOwn(runtimes, value.provider)) throw new Error('Unknown provider.')
   if (value.model !== undefined && !runtimes[runtime.provider].models.some(model => model.id === value.model)) throw new Error('Unsupported model.')
   if (value.effort !== undefined && !effortSteps(runtime.provider, runtime.model).includes(value.effort)) throw new Error('Unsupported effort.')
   if (value.mode !== undefined && normalizeMode(runtime.provider, value.mode) !== value.mode) throw new Error('That mode is not supported by this provider.')
   return { id: value.id, name: text(value.name ?? 'New bot', 60, 'Name').replace(/\n/g, ' '), description: text(value.description ?? '', 1800, 'Description'), ...runtime,
-    mode: normalizeMode(runtime.provider, value.mode), avatar: avatarValue(value.avatar), computer: computerValue(value.computer) }
+    mode: normalizeMode(runtime.provider, value.mode), nativeComputer: value.nativeComputer ?? 'off', avatar: avatarValue(value.avatar), computer: computerValue(value.computer) }
 }
 
 export function patchBot(bot, changes) {

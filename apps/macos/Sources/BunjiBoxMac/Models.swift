@@ -15,6 +15,7 @@ struct Bot: Codable, Identifiable, Hashable, Sendable {
     var mode: String
     var avatar: BotAvatar
     var computer: ComputerAccess
+    var nativeComputer: String? = nil
 }
 
 struct BotAvatar: Codable, Hashable, Sendable {
@@ -158,6 +159,8 @@ struct CreateBotRequest: Encodable, Sendable {
 }
 
 struct BotPatch: Encodable, Sendable {
+    var nativeComputer: String?
+
     var name: String?
     var description: String?
     var provider: String?

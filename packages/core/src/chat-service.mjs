@@ -53,7 +53,7 @@ export function createChatService({ bots, chats, memoryDirectory, memory, files,
       // Validation and idempotency happen before launching any process. Computer
       // scope is read from the saved bot, never from the request body.
       providerCommand({ provider, model, effort, prompt: initialContext.prompt, mode }, {
-        computer: initialAgentTools ? bot.computer : undefined, messages: initialContext.messages,
+        computer: initialAgentTools ? bot.computer : undefined, nativeComputer: initialAgentTools ? bot.nativeComputer : undefined, messages: initialContext.messages,
       })
       const previous = chats.get(id)
       if (previous) return chats.start({ id, botId, prompt, provider, model, effort, requestedMode: previous.requestedMode, mode: previous.mode,
@@ -95,7 +95,7 @@ export function createChatService({ bots, chats, memoryDirectory, memory, files,
             requestId: id, signal: controller.signal,
             ...(actualMode === 'chat' ? { messages: context.messages } : {}),
             ...(session ? { session } : {}),
-            ...(agentTools ? { memory: { botId, sourceId: id, directory: memoryDirectory, allowWrites: true }, computer: bot.computer } : {}),
+            ...(agentTools ? { memory: { botId, sourceId: id, directory: memoryDirectory, allowWrites: true }, computer: bot.computer, nativeComputer: bot.nativeComputer } : {}),
             ...(outputDirectory ? { files: { path: files.path, cwd }, onFile: file => fileWork(() => files.register(botId, id, file.path, { computer: bot.computer, cwd, change: file.change })) } : {}),
             onActivity: activity => chats.addActivity(id, phaseActivity(activity, phase)),
           })

@@ -10,7 +10,7 @@ export const workspaceDirectory = () => process.env.BUNJI_DATA_DIR || join(proce
 export const workspacePath = () => join(workspaceDirectory(), 'workspace.sqlite')
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const fail = (message, status = 400) => Object.assign(new Error(message), { status })
-const botFields = ['id', 'name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer']
+const botFields = ['id', 'name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer', 'nativeComputer']
 const patchFields = botFields.filter(field => field !== 'id')
 const machineConfirmationRequired = () => { throw fail('Full-machine access must be enabled in Computer access settings.', 409) }
 const folderConfirmationRequired = () => { throw fail('Folder access must be enabled in Computer access settings.', 409) }
@@ -35,6 +35,7 @@ export function openBotStore({ path = workspacePath(), legacyPath = join(dirname
   const newBot = value => {
     if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !botFields.includes(key))) throw fail('Unknown bot setting.')
     const { computer, ...details } = value
+    if (details.nativeComputer && details.nativeComputer !== 'off') throw fail('Enable native control after confirming full-machine access.', 409)
     if (computer?.scope === 'machine') machineConfirmationRequired()
     if (computer?.scope === 'folder') folderConfirmationRequired()
     return { ...makeBot(details), computer: computer === undefined ? { ...defaultComputerProfile } : computerProfile(computer, { workspaceRoot }) }
@@ -42,6 +43,11 @@ export function openBotStore({ path = workspacePath(), legacyPath = join(dirname
   const editedBot = (bot, changes) => {
     if (!changes || typeof changes !== 'object' || Array.isArray(changes) || Object.keys(changes).some(key => !patchFields.includes(key))) throw fail('Unknown bot setting.')
     const { computer, ...details } = changes
+    if (details.nativeComputer && details.nativeComputer !== 'off' &&
+        (bot.computer.scope !== 'machine' || bot.computer.level !== 'auto' ||
+         !['codex', 'claude'].includes(details.provider ?? bot.provider) || computer)) {
+      throw fail('Native control requires saved full-machine access and Codex or Claude.', 409)
+    }
     if (computer?.scope === 'machine') machineConfirmationRequired()
     if (computer?.scope === 'folder') folderConfirmationRequired()
     return {

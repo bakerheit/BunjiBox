@@ -352,6 +352,9 @@ private struct AgentSettingsInspector: View {
                     LabeledContent("Provider", value: RuntimeCatalog.labels[bot.provider] ?? bot.provider)
                     LabeledContent("Model", value: RuntimeCatalog.modelLabel(provider: bot.provider, model: bot.model))
                 }
+                Section("Native control") {
+                    NativeComputerSettings(store: store, bot: bot)
+                }
                 Section("Computer") {
                     LabeledContent("Access", value: bot.computer.scope == "machine" ? "This Mac · full access" : bot.computer.scope == "folder" ? "Selected folder" : "Not connected")
                     LabeledContent("Network", value: bot.computer.network.capitalized)

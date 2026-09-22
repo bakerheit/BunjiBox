@@ -19,6 +19,33 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
 const settings = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', mode: 'agent' }
+test('normal auto chat forwards only the saved native target to both provider adapters', async t => {
+  // Explicit Chat can be tested without a built macOS helper. Agent integration
+  // is exercised when the helper is available (see native-computer.test.mjs).
+  for (const provider of ['codex', 'claude']) {
+    let observed
+    const f = await fixture(t, async (options, hooks) => {
+      observed = { options, hooks }
+      const [, args] = providerCommand(options, hooks)
+      assert.ok(args.some(arg => arg.includes('bunji_native')))
+      return { ok: true, text: 'Native tools available.' }
+    })
+    f.bots.confirmMachine('bunjibox', { scope: 'machine', level: 'auto', network: 'off' })
+    f.bots.patch('bunjibox', { provider, nativeComputer: 'fixture' })
+    const id = `native-${provider}`
+    try {
+      f.service.start('bunjibox', { id, prompt: 'Use the native fixture', provider,
+        model: provider === 'claude' ? 'sonnet' : 'gpt-5.6-luna', effort: 'low', mode: 'auto' })
+    } catch (error) {
+      if (/Build the native helper first|Native control requires macOS/.test(error.message)) { t.skip(error.message); return }
+      throw error
+    }
+    assert.equal((await done(f.chats, id)).status, 'complete')
+    assert.equal(observed.options.mode, 'agent')
+    assert.equal(observed.hooks.nativeComputer, 'fixture')
+    assert.equal(observed.hooks.computer.scope, 'machine')
+  }
+})
 async function fixture(t, run) {
   const dir = await mkdtemp(join(await realpath(tmpdir()), 'bunji-continuity-test-'))
   const path = join(dir, 'workspace.sqlite'), bots = openBotStore({ path }), chats = openChatStore({ path })
