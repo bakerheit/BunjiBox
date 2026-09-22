@@ -23,6 +23,20 @@ same request after a network error; Cancel stops it. Unsaved previews expire aft
 
 Click anywhere across an agent's sidebar row to open its conversation.
 
+Chat messages use the active agent's avatar color for subtle bubbles in light and
+dark mode, with user messages on the right and replies on the left. White avatars
+use a neutral tint. Both prompts and replies render spaced paragraphs, `#` headings,
+numbered and bulleted lists (including nested lists), blockquotes, horizontal rules,
+and pipe tables. Fenced code preserves whitespace, scrolls horizontally, and has a
+Copy button. Text is selectable; HTTP, HTTPS, and email links are clickable.
+
+Formatting is local presentation only; stored message text stays intact. The small
+native parser does not implement all of CommonMark: table column alignment, HTML,
+remote images, reference-style links, and indented code blocks are not rendered as
+rich content. Use fenced code blocks. Incomplete fences remain readable. Verify
+layout, selection, links, and Copy in the running app after building; the automated
+checks cover parsing, code preservation, link filtering, and text contrast.
+
 ```bash
 npm run macos:build
 npm run macos:app

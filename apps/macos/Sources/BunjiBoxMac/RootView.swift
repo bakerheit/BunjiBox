@@ -123,7 +123,8 @@ private struct ChatWorkspace: View {
                             .padding(.top, 90)
                         }
                         ForEach(store.requests) { request in
-                            ChatTurn(request: request).id(request.id)
+                            ChatTurn(request: request, avatar: store.selectedBot?.avatar ?? AvatarPalette.defaultAvatar)
+                                .id(request.id)
                         }
                     }
                     .padding(24)
@@ -142,15 +143,19 @@ private struct ChatWorkspace: View {
 
 private struct ChatTurn: View {
     let request: ChatRequest
+    let avatar: BotAvatar
+    @Environment(\.colorScheme) private var colorScheme
+
+    private func colors(isUser: Bool) -> MessageBubbleColors {
+        MessageBubbleColors(avatarHex: avatar.color, isUser: isUser, isDark: colorScheme == .dark)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Spacer(minLength: 70)
-                Text(request.prompt)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+                MessageMarkdownView(request.prompt)
+                    .modifier(MessageBubble(colors: colors(isUser: true)))
             }
 
             if !request.activities.isEmpty {
@@ -163,21 +168,26 @@ private struct ChatTurn: View {
                 .font(.caption).foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("\(RuntimeCatalog.modelLabel(provider: request.provider, model: request.model)) · \(request.effort)")
-                    .font(.caption).foregroundStyle(.secondary)
-                if request.isRunning {
-                    HStack { ProgressView().controlSize(.small); Text("Working…") }.foregroundStyle(.secondary)
-                } else if !request.text.isEmpty {
-                    MarkdownText(request.text)
+            HStack(alignment: .top, spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("\(RuntimeCatalog.modelLabel(provider: request.provider, model: request.model)) · \(request.effort)")
+                        .font(.caption).foregroundStyle(colors(isUser: false).secondary.color)
+                    if request.isRunning {
+                        HStack { ProgressView().controlSize(.small); Text("Working…") }
+                            .foregroundStyle(colors(isUser: false).secondary.color)
+                    } else if !request.text.isEmpty {
+                        MessageMarkdownView(request.text)
+                    }
+                    if let error = request.error { Text(error).foregroundStyle(.red) }
+                    if let usage = request.usage {
+                        Text("\(usage.outputTokens.formattedToken) output · \(usage.totalTokens.formattedToken) total")
+                            .font(.caption2).foregroundStyle(colors(isUser: false).secondary.color)
+                    }
                 }
-                if let error = request.error { Text(error).foregroundStyle(.red) }
-                if let usage = request.usage {
-                    Text("\(usage.outputTokens.formattedToken) output · \(usage.totalTokens.formattedToken) total")
-                        .font(.caption2).foregroundStyle(.tertiary)
-                }
+                .textSelection(.enabled)
+                .modifier(MessageBubble(colors: colors(isUser: false)))
+                Spacer(minLength: 32)
             }
-            .textSelection(.enabled)
         }
     }
 }
@@ -197,16 +207,6 @@ private struct ActivityRow: View {
             Image(systemName: activity.status == "complete" ? "checkmark.circle.fill" : activity.status == "failed" ? "xmark.circle.fill" : "circle.dotted")
                 .foregroundStyle(activity.status == "failed" ? .red : .secondary)
         }
-    }
-}
-
-private struct MarkdownText: View {
-    let value: String
-    init(_ value: String) { self.value = value }
-    var body: some View {
-        if let attributed = try? AttributedString(markdown: value, options: .init(interpretedSyntax: .full)) {
-            Text(attributed).lineSpacing(4)
-        } else { Text(value).lineSpacing(4) }
     }
 }
 
