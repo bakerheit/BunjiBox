@@ -101,5 +101,29 @@ enum ComputerUseNativeSpikeChecks {
             gate.accepts(SequencedCommand(lease: nextLease, sequence: 1)),
             "New generation starts with a fresh sequence"
         )
+        var observation = ObservationGuard(maxAge: 10, maxActions: 2)
+        let generation = observation.generation
+        _ = try observation.record(id: "frame-a", width: 100, height: 50, startedGeneration: generation, now: 100)
+        check(try observation.validate(id: "frame-a", now: 105, x: 99, y: 49).width == 100, "Real image bounds accepted")
+        func rejects(_ name: String, _ operation: () throws -> Void) {
+            do { try operation(); check(false, name) } catch { check(true, name) }
+        }
+        rejects("Image right edge excluded") { _ = try observation.validate(id: "frame-a", now: 105, x: 100, y: 10) }
+        rejects("NaN coordinates rejected") { _ = try observation.validate(id: "frame-a", now: 105, x: .nan, y: 10) }
+        rejects("Missing coordinate rejected") { _ = try observation.validate(id: "frame-a", now: 105, x: 10) }
+        rejects("Stale frame age rejected") { _ = try observation.validate(id: "frame-a", now: 111) }
+        rejects("Clock reversal rejected") { _ = try observation.validate(id: "frame-a", now: 99) }
+        try observation.consume(id: "frame-a", now: 105)
+        rejects("Consumed frame cannot replay") { try observation.consume(id: "frame-a", now: 105) }
+        observation.pause()
+        rejects("Capture completing after takeover rejected") { _ = try observation.record(id: "racy", width: 100, height: 50, startedGeneration: generation, now: 106) }
+        observation.resumeFromUI()
+        rejects("Pre-takeover generation rejected after resume") { _ = try observation.record(id: "racy", width: 100, height: 50, startedGeneration: generation, now: 106) }
+        _ = try observation.record(id: "frame-b", width: 100, height: 50, startedGeneration: observation.generation, now: 107)
+        try observation.consume(id: "frame-b", now: 108)
+        _ = try observation.record(id: "frame-c", width: 100, height: 50, startedGeneration: observation.generation, now: 109)
+        rejects("Session action cap enforced") { try observation.consume(id: "frame-c", now: 110) }
+        observation.stop(); observation.resumeFromUI()
+        check(observation.stopped && !observation.running, "Stop cannot be resumed, including from UI")
     }
 }

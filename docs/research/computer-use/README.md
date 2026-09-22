@@ -1,6 +1,10 @@
 # Bunji computer-use research and spikes
 
 These are isolated experiments, **not computer-use features enabled in BunjiBox**.
+The [native lab follow-up](../../../experiments/computer-use-native/README.md) now
+has a working subscription-backed screenshot/action loop against a disposable
+AppKit fixture. External app control remains unverified. The original research
+results below describe the first set of spikes, not that later milestone.
 Three workers were requested as `gpt-5.6-luna` with `model_reasoning_effort="max"`
 through the installed Codex CLI, in separate Git worktrees. The normal subagent
 launcher rejected Luna. The CLI accepted the jobs but warned that Luna's local
@@ -73,8 +77,9 @@ executable checks. No Xcode license or OS permission was changed.
 
 ## Next implementation gate
 
-First, prove one synthetic screenshot + scoped MCP tool round-trip through each
-signed-in CLI. Then wire an owned browser to a real bot behind an experimental flag.
+The Codex and Claude fixture screenshot + scoped MCP round-trips now pass. Prove
+real external native app capture/input next, then wire a surface to a real
+bot behind an experimental flag.
 Verify click/type/scroll, redirects, login handoff, stale-frame rejection, stop,
 takeover, and preservation across pane/PiP changes. Native apps come after that.
 
@@ -86,6 +91,10 @@ over Wi-Fi. These prototypes do not yet implement that production boundary.
 Potential improvements over the reference UI to evaluate, not yet implemented:
 show the active agent/app, label stale or paused previews, provide one-click takeover,
 and show small action-specific highlights without moving the user's pointer.
+
+For TypeSafe, see the [Jev evaluation proposal](jev-for-bunji.md), based on the
+now-available official API docs. It proposes routing and selection tests, not a
+replacement for the native visual driver or permission checks.
 
 ## Detail
 
