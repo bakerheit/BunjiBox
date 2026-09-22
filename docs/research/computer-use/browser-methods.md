@@ -72,8 +72,6 @@ Run it with `swift run --package-path experiments/computer-use-browser`. In this
 - This validates logical cancellation gates only. A real adapter must also cancel its in-flight `Task`/browser operation and serialize the stop barrier with native input; this package does not prove OS/WebKit input preemption.
 - No visual, live-screen, login, permission, or remote-network QA was done. Those are intentionally left to the main agent/user under the stated boundary.
 
-## Primary references
-
 ## Main-agent visual follow-up
 
 After the Luna worker finished, the main agent added the separate `BrowserShellDemo`

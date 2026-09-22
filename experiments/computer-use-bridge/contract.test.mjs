@@ -62,7 +62,7 @@ test('MCP observation bundles one frame, untrusted ARIA evidence, and its image'
   const result = observationToolResult(observed, context(observed))
   assert.equal(result.structuredContent.frameId, 'frame-1')
   assert.equal(result.structuredContent.evidenceIsUntrusted, true)
-  assert.match(result.content[0].text, /button \\\"Continue\\\"/)
+  assert.equal(JSON.parse(result.content[0].text).ariaSnapshot, observed.latestFrame.ariaSnapshot)
   assert.deepEqual(result.content[1], { type: 'image', data: 'ZmFrZS1pbWFnZQ==', mimeType: 'image/png' })
 })
 
