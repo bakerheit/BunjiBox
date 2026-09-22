@@ -21,6 +21,7 @@
     "macos:build": "swift build --package-path apps/macos",
     "macos:run": "swift run --package-path apps/macos BunjiBoxMac",
     "macos:app": "zsh apps/macos/Scripts/build-app.sh",
+    "macos:check": "node --test apps/macos/Checks/*.test.mjs",
     "build": "npm run build --workspaces --if-present",
     "build:site": "npm run build -w @bunji/site",
     "lint": "oxlint",

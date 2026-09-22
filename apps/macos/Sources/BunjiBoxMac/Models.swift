@@ -21,6 +21,14 @@ struct BotAvatar: Codable, Hashable, Sendable {
     var shape: String
     var color: String
     var image: String?
+
+    // PATCH merges avatar fields, so clearing a picture requires an explicit null.
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(shape, forKey: .shape)
+        try values.encode(color, forKey: .color)
+        try values.encode(image, forKey: .image)
+    }
 }
 
 struct ComputerAccess: Codable, Hashable, Sendable {
@@ -137,6 +145,7 @@ struct BotPatch: Encodable, Sendable {
     var model: String?
     var effort: String?
     var mode: String?
+    var avatar: BotAvatar?
 }
 
 enum RuntimeCatalog {

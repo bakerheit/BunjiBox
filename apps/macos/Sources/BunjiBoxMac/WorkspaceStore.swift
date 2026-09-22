@@ -11,10 +11,12 @@ final class WorkspaceStore: ObservableObject {
     @Published var isConnecting = true
     @Published var isSending = false
     @Published var inspectorTab = InspectorTab.activity
+    @Published var editingBot: Bot?
 
     private let api = BunjiAPI()
     private let service = BunjiServiceController()
     private var pollingTask: Task<Void, Never>?
+    private var botsRevision = -1
 
     var selectedBot: Bot? { bots.first(where: { $0.id == selectedBotID }) }
     var runningRequest: ChatRequest? { requests.last(where: \.isRunning) }
@@ -27,6 +29,7 @@ final class WorkspaceStore: ObservableObject {
             isConnecting = false
             pollingTask = Task { [weak self] in
                 while !Task.isCancelled {
+                    try? await self?.refreshBots()
                     await self?.refreshHistory(silent: true)
                     try? await Task.sleep(for: .milliseconds(1200))
                 }
@@ -38,12 +41,22 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func reloadBots() async throws {
-        let response = try await api.bots()
+        try await refreshBots()
+        await refreshHistory(silent: true)
+    }
+
+    private func apply(_ response: BotListResponse) {
+        guard response.revision >= botsRevision else { return }
+        botsRevision = response.revision
         bots = response.bots
         if selectedBotID == nil || !bots.contains(where: { $0.id == selectedBotID }) {
             selectedBotID = bots.first?.id
+            requests = []
         }
-        await refreshHistory(silent: true)
+    }
+
+    private func refreshBots() async throws {
+        apply(try await api.bots())
     }
 
     func select(_ bot: Bot) {
@@ -91,16 +104,26 @@ final class WorkspaceStore: ObservableObject {
         do {
             let response = try await api.createBot()
             let oldIDs = Set(bots.map(\.id))
-            bots = response.bots
-            if let created = bots.first(where: { !oldIDs.contains($0.id) }) { select(created) }
+            apply(response)
+            if let created = bots.first(where: { !oldIDs.contains($0.id) }) {
+                select(created)
+                editingBot = created
+            }
         } catch { errorMessage = error.localizedDescription }
     }
 
     func updateSelected(_ changes: BotPatch) async {
         guard let id = selectedBotID else { return }
+        await update(botID: id, changes: changes)
+    }
+
+    func saveProfile(botID: String, changes: BotPatch) async throws {
+        apply(try await api.patch(botID: botID, changes: changes))
+    }
+
+    private func update(botID: String, changes: BotPatch) async {
         do {
-            let response = try await api.patch(botID: id, changes: changes)
-            bots = response.bots
+            try await saveProfile(botID: botID, changes: changes)
             errorMessage = nil
         } catch { errorMessage = error.localizedDescription }
     }
@@ -112,13 +135,14 @@ final class WorkspaceStore: ObservableObject {
         let effort = efforts.contains(bot.effort) ? bot.effort : "medium"
         bots[index].model = model
         bots[index].effort = effort
-        Task { await updateSelected(BotPatch(model: model, effort: effort)) }
+        Task { await update(botID: bot.id, changes: BotPatch(model: model, effort: effort)) }
     }
 
     func setEffort(_ effort: String) {
         guard let index = bots.firstIndex(where: { $0.id == selectedBotID }) else { return }
         bots[index].effort = effort
-        Task { await updateSelected(BotPatch(effort: effort)) }
+        let id = bots[index].id
+        Task { await update(botID: id, changes: BotPatch(effort: effort)) }
     }
 }
 

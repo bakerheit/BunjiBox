@@ -21,6 +21,11 @@ struct RootView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
         }
+        .sheet(item: $store.editingBot) { bot in
+            AgentProfileEditor(bot: bot) { changes in
+                try await store.saveProfile(botID: bot.id, changes: changes)
+            }
+        }
         .alert("BunjiBox", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
@@ -59,6 +64,9 @@ private struct AgentSidebar: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Edit profile…") { store.editingBot = bot }
+                        }
                         .padding(.vertical, 3)
                         .listRowBackground(store.selectedBotID == bot.id ? Color.accentColor.opacity(0.18) : Color.clear)
                     }
@@ -83,8 +91,14 @@ private struct ChatWorkspace: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 if let bot = store.selectedBot {
-                    AvatarView(avatar: bot.avatar, size: 30)
-                    Text(bot.name).font(.headline)
+                    Button { store.editingBot = bot } label: {
+                        HStack(spacing: 10) {
+                            AvatarView(avatar: bot.avatar, size: 30)
+                            Text(bot.name).font(.headline)
+                        }
+                    }
+                    .buttonStyle(.plain).help("Edit agent profile")
+                    .accessibilityLabel("Edit profile for \(bot.name)")
                     Text(RuntimeCatalog.labels[bot.provider] ?? bot.provider)
                         .font(.caption).foregroundStyle(.secondary)
                 } else { Text("No agent selected").foregroundStyle(.secondary) }
@@ -328,6 +342,10 @@ private struct AgentSettingsInspector: View {
         Form {
             if let bot = store.selectedBot {
                 Section("Agent") {
+                    HStack(spacing: 12) {
+                        AvatarView(avatar: bot.avatar, size: 44)
+                        Button("Edit profile…") { store.editingBot = bot }
+                    }
                     LabeledContent("Name", value: bot.name)
                     LabeledContent("Provider", value: RuntimeCatalog.labels[bot.provider] ?? bot.provider)
                     LabeledContent("Model", value: RuntimeCatalog.modelLabel(provider: bot.provider, model: bot.model))
@@ -346,29 +364,12 @@ private struct AgentSettingsInspector: View {
     }
 }
 
-struct AvatarView: View {
-    let avatar: BotAvatar
-    let size: CGFloat
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: avatar.shape == "square" ? size * 0.23 : size * 0.42)
-                .fill(Color(hex: avatar.color))
-            HStack(spacing: size * 0.12) {
-                Capsule().fill(.black.opacity(0.72)).frame(width: size * 0.1, height: size * 0.24).rotationEffect(.degrees(-10))
-                Capsule().fill(.black.opacity(0.72)).frame(width: size * 0.1, height: size * 0.24).rotationEffect(.degrees(-10))
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(avatar.shape == "circle" ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: avatar.shape == "square" ? size * 0.23 : size * 0.42)))
-    }
-}
-
 private extension Optional where Wrapped == Int {
     var formattedToken: String { self?.formatted() ?? "Unavailable" }
     var approxTokens: String { self.map { "~\($0.formatted())" } ?? "Unavailable" }
 }
 
-private extension Color {
+extension Color {
     init(hex: String) {
         let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         let value = UInt64(clean, radix: 16) ?? 0x777777
