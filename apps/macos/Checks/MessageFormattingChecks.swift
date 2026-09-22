@@ -107,7 +107,8 @@ struct MessageFormattingChecks {
             let user = MessageBubbleColors(avatarHex: "#087ee7", isUser: true, isDark: dark)
             let assistant = MessageBubbleColors(avatarHex: "#087ee7", isUser: false, isDark: dark)
             precondition(user.background != assistant.background)
-            precondition(user.background.blue > user.background.red, "Avatar hue must reach both bubbles")
+            precondition(user.background.red == user.background.green && user.background.green == user.background.blue, "Human bubbles must stay neutral")
+            precondition(user.background == MessageBubbleColors(avatarHex: "#ee1734", isUser: true, isDark: dark).background, "Changing agents must not recolor human messages")
             precondition(assistant.background.blue > assistant.background.red)
         }
         print(String(format: "Minimum tested body/metadata contrast: %.2f:1", lowestContrast))

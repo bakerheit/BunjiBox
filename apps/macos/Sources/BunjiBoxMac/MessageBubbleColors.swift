@@ -42,7 +42,10 @@ struct MessageBubbleColors {
         let avatar = MessageRGB(hex: avatarHex) ?? neutral
         let tint = min(avatar.red, avatar.green, avatar.blue) > 0.94 ? neutral : avatar
         let base = isDark ? MessageRGB(0.12, 0.12, 0.12) : MessageRGB(0.98, 0.98, 0.98)
-        background = base.mixed(with: tint, amount: isDark ? (isUser ? 0.24 : 0.15) : (isUser ? 0.16 : 0.09))
+        // The agent owns the accent. Human messages stay neutral across agents.
+        background = isUser
+            ? (isDark ? MessageRGB(0.21, 0.21, 0.21) : MessageRGB(0.90, 0.90, 0.90))
+            : base.mixed(with: tint, amount: isDark ? 0.15 : 0.09)
         foreground = isDark ? MessageRGB(0.96, 0.96, 0.96) : MessageRGB(0.10, 0.10, 0.10)
         secondary = isDark ? MessageRGB(0.78, 0.78, 0.78) : MessageRGB(0.33, 0.33, 0.33)
     }

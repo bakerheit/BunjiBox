@@ -10,6 +10,7 @@ import UsagePage from './UsagePage'
 import TokenLog from './TokenLog'
 import { summarizeRequests, tokenCount } from '@bunji/shared/token-usage'
 import Markdown from './Markdown'
+import { messageBubbleStyle } from './message-bubble'
 import RunActivity from './RunActivity'
 import MemoryPanel from './MemoryPanel'
 import ComputerAccessPanel from './ComputerAccessPanel'
@@ -380,7 +381,7 @@ function App() {
             const request = requests.find(request => request.id === message.requestId)
             return <div key={index} className="message-turn">
               {message.kind !== 'user' && request && <RunActivity activities={request.activities} status={request.status} limited={request.activityLimited} />}
-              {message.text && <div className={'message ' + message.kind}>
+              {message.text && <div className={'message ' + message.kind} style={messageBubbleStyle(message.kind, bot.avatar)}>
                 {message.kind !== 'user' && <small>{message.kind === 'error' ? 'Could not complete request' : message.runtime}</small>}
                 {editing?.id === message.requestId && editing.role === (message.kind === 'user' ? 'user' : 'assistant') ? <div className="message-edit">
                   <label><span>Edit {message.kind === 'user' ? 'message' : 'reply'}</span><textarea value={editing.value} maxLength={message.kind === 'user' ? 12000 : 1000000} onChange={event => setEditing(current => ({ ...current, value: event.target.value }))} /></label>

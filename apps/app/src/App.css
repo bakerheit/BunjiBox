@@ -48,7 +48,7 @@ button:disabled { cursor: default; }
 .message p { line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
 .message.user { margin-left:auto; background:#353535; }
 .message.error { color:#ffd2bd; border:1px solid #793c30; }
-.message.bot { width:100%; max-width:100%; background:transparent; padding:4px 0 12px; }
+.message.bot { width:fit-content; max-width:100%; background:#252525; padding:14px 16px; }
 .message-turn { min-width:0; }
 .message .markdown p { white-space:normal; }
 .message-foot { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
