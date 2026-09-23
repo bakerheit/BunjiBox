@@ -12,7 +12,7 @@ export default function Hero() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-hairline bg-surface-raised px-3 py-1.5 text-xs text-neutral-400">
             <Terminal className="h-3.5 w-3.5 text-brand-cyan" />
-            Runs on your Mac. Nothing leaves your network.
+            Open source · local workspace · macOS alpha
           </div>
 
           <h1 className="mt-6 text-balance text-5xl font-semibold leading-[1.05] tracking-tight text-white lg:text-6xl">
@@ -24,15 +24,15 @@ export default function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed text-neutral-400">
-            BunjiBox drives Claude and Codex through the CLIs already signed in on your
-            Mac. Your bots, chats, memory and files live in one local workspace — open
-            it in a terminal, in a browser tab, or from your phone on the same WiFi.
+            BunjiBox connects to locally signed-in Claude and Codex CLIs, with optional
+            OpenRouter and Ollama support. Bots, chats, memory and files share one
+            workspace you can open in a terminal, browser, or phone on your local network.
           </p>
 
           <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-neutral-500">
-            <li>No API keys</li>
-            <li className="before:mr-6 before:text-hairline before:content-['•']">No second subscription</li>
-            <li className="before:mr-6 before:text-hairline before:content-['•']">No cloud account</li>
+            <li>MIT licensed</li>
+            <li className="before:mr-6 before:text-hairline before:content-['•']">Use existing CLI sign-ins</li>
+            <li className="before:mr-6 before:text-hairline before:content-['•']">Local workspace</li>
           </ul>
 
           <div className="mt-9 flex flex-wrap items-center gap-3">
@@ -52,7 +52,7 @@ export default function Hero() {
           </div>
 
           <div className="mt-9 max-w-md">
-            <CodeBlock lines={['npm install', 'npm link', 'bunji']} />
+            <CodeBlock lines={['npm ci', 'npm link', 'bunji']} />
           </div>
         </div>
 

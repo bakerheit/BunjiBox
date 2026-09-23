@@ -1,17 +1,28 @@
 # BunjiBox
 
-BunjiBox is a local agent workbench for Claude, Codex, OpenRouter, and a temporary Ollama endpoint. It uses the subscription-backed CLIs already signed in on the Mac, calls OpenRouter with a user-supplied API key, and can run Ollama on another trusted LAN device such as a Raspberry Pi.
+BunjiBox is an open source agent workbench with a web app, terminal client, and
+native macOS client. It connects to locally signed-in Codex and Claude CLIs,
+OpenRouter with a user-provided API key, and an optional Ollama server.
 
-This is an early, Mac-focused open source project. The web app, CLI, and native
-client share one local workspace. See [Contributing](CONTRIBUTING.md) to get
-started, [Security](SECURITY.md) for vulnerability reports, and the
-[MIT license](LICENSE) for reuse terms.
+The clients share a local workspace and a single provider runtime. BunjiBox is
+under active development. See the [contribution guide](CONTRIBUTING.md),
+[security policy](SECURITY.md), and [MIT license](LICENSE).
+Chats are stored locally; requests sent to hosted providers leave your network.
+
+## Platform support
+
+macOS is the supported host platform today. The native client, computer
+controls, and in-app OpenRouter key storage use macOS APIs. The Node-based
+server and clients may work elsewhere, but other operating systems are not yet
+supported or covered by CI. On any host, `OPENROUTER_API_KEY` can supply a key
+without using the in-app key store.
 
 ## Quick start
 
-You need macOS, Node.js 22.13 or newer, npm, and at least one signed-in provider:
-`codex login` or `claude auth login`. The native app also needs Swift Package
-Manager. OpenRouter and Ollama are optional.
+On a supported macOS host, install Node.js 22.13 or newer and npm. Sign in to
+at least one provider with `codex login` or `claude auth login`, or configure
+OpenRouter or Ollama as described below. The native client also needs Swift
+Package Manager.
 
 ```bash
 git clone https://github.com/bakerheit/BunjiBox.git
@@ -26,7 +37,8 @@ For a terminal-only start, use `npm run bunji`. The API listens on
 
 ## Repo layout
 
-npm workspaces, one lockfile, no build graph tool. Every package is private.
+npm workspaces, one lockfile, no build graph tool. Workspace packages are marked
+private because they are not published to npm.
 
 ```
 apps/app       @bunji/app      workbench UI (Vite + React)
@@ -50,7 +62,7 @@ bin so `npm link` keeps working.
 Requires Node.js 22.13 or newer and locally installed `codex` / `claude` CLIs.
 
 ```bash
-npm install
+npm ci
 npm link
 bunji
 ```
@@ -77,7 +89,7 @@ activity. `bunji --help` lists options, including `--provider`, `--model`,
 | Ctrl+X / Ctrl+C | Stop request / exit |
 
 Use `/name`, `/description`, `/color`, and `/shape` to customize a bot. Bots and
-avatars are shared with every browser connected to the same Mac, in
+avatars are shared with every browser connected to the host computer, in
 `~/.config/bunji/workspace.sqlite` (or `$XDG_CONFIG_HOME/bunji/workspace.sqlite`).
 `BUNJI_DATA_DIR` overrides this directory; the web backend and CLI must use the
 same value. Changes sync roughly every two seconds, without replacing other
@@ -86,8 +98,9 @@ devices' unrelated edits. Terminal avatars use a glyph/color fallback for images
 The old CLI config is imported once and retained. Old browser bots/avatars import
 when that browser next connects; conflicting copies are kept as recovered bots.
 Refresh old browser tabs and restart old CLI processes to load the new sync code.
-The shared workspace is on this Mac, not in a cloud account; the Mac must be
-reachable for a phone to connect. Other Macs do not automatically share this file.
+The workspace is stored on the host computer, not in a cloud account. A phone
+must be able to reach that host to connect. Workspaces on different computers
+do not sync automatically.
 
 New chat messages, tool activity, and token counts are **saved and shared** across
 the web app and interactive CLI. Closing a client does not stop a running request.
@@ -113,7 +126,8 @@ npm run api
 npm run dev -- --host 0.0.0.0
 ```
 
-Open `http://localhost:5173/` or the Mac's WiFi address on a phone.
+Open `http://localhost:5173/` on the host, or its local network address on a
+phone connected to the same trusted network.
 
 The Vite server proxies `/api` to the local-only bridge on `127.0.0.1:4318`.
 
@@ -182,7 +196,7 @@ Deleting an agent does not delete its created files from disk.
 - Claude: Opus, Sonnet, or Haiku; low through max effort.
 - Codex: GPT-6 Astra, GPT-5.6 Sol, Terra, Luna, or GPT-5.5; model-specific effort options.
 - OpenRouter: the free-model or automatic router; low through high effort. Add or replace the API key on the Usage page. BunjiBox verifies it with OpenRouter and stores it in macOS Keychain, never browser storage.
-- Ollama · Pi: Gemma3 1B; the temporary connector runs it in chat mode.
+- Ollama: Gemma3 1B; the temporary connector runs it in chat mode.
 - Bot names, descriptions, avatars, provider, model, effort, and default run mode persist in the
   shared workspace, not per-browser storage. Failed saves show a warning and retry.
 - Settings or the sidebar’s three-dot menu can delete an agent and its chat history. If it has memory notes,
@@ -231,8 +245,9 @@ or set `OPENROUTER_API_KEY` before starting the local service. Direct OpenRouter
 chat and token accounting work in this alpha; Bunji memory, computer, and file
 tools are not exposed to OpenRouter models yet.
 
-The temporary Ollama connector defaults to `http://192.168.68.78:11434`. Set
-`BUNJI_OLLAMA_URL` before starting BunjiBox to point it at another Ollama host.
+Ollama defaults to `http://127.0.0.1:11434`. Set `BUNJI_OLLAMA_URL` before
+starting BunjiBox to use an Ollama server on another trusted host. For example,
+`BUNJI_OLLAMA_URL=http://192.168.1.10:11434 npm run api`.
 Keep that endpoint on a trusted network; BunjiBox does not add authentication to
 the Ollama connection.
 

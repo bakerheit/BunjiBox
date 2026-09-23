@@ -11,10 +11,10 @@ export const runtimes = {
     { id: 'openrouter/free', label: 'Free Model Router' },
     { id: 'openrouter/auto', label: 'Auto Router' },
   ] },
-  ollama: { label: 'Ollama · Pi', modes: ['chat'], models: [
-    { id: 'gemma3:1b', label: 'Gemma3 1B · Raspberry Pi' },
+  ollama: { label: 'Ollama', modes: ['chat'], models: [
+    { id: 'gemma3:1b', label: 'Gemma3 1B' },
     // Keep existing agents readable when a new default model is introduced.
-    { id: 'qwen3:1.7b', label: 'Qwen3 1.7B · Raspberry Pi' },
+    { id: 'qwen3:1.7b', label: 'Qwen3 1.7B' },
   ] },
 }
 

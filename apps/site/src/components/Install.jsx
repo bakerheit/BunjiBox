@@ -20,13 +20,13 @@ export default function Install() {
           </Step>
 
           <Step n="2" title="Run the terminal app" body="It starts the shared API itself when it needs one.">
-            <CodeBlock lines={['npm install', 'npm link', 'bunji']} />
+            <CodeBlock lines={['git clone https://github.com/bakerheit/BunjiBox.git', 'cd BunjiBox', 'npm ci', 'npm link', 'bunji']} />
           </Step>
 
           <Step
             n="3"
             title="Or open the workbench"
-            body="Then visit localhost:5173, or your Mac’s WiFi address from a phone."
+            body="Then visit localhost:5173, or the host computer’s local address from a phone."
           >
             <CodeBlock lines={['npm run api', 'npm run dev']} />
           </Step>
@@ -38,7 +38,7 @@ export default function Install() {
             <h3 className="font-semibold text-amber-100">This is a LAN-only alpha</h3>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-amber-100/70">
               There is no account or device authentication. Anyone who can reach the web app
-              on your network can grant a bot full access to the Mac and send it commands.
+              on your network can grant a bot full access to the host computer and send it commands.
               Run it on a network you trust, and do not expose the dev server to the public
               internet.
             </p>

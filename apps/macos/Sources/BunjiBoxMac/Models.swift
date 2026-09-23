@@ -172,12 +172,12 @@ struct BotPatch: Encodable, Sendable {
 
 enum RuntimeCatalog {
     static let providers = ["codex", "claude", "openrouter", "ollama"]
-    static let labels = ["codex": "Codex", "claude": "Claude", "openrouter": "OpenRouter", "ollama": "Ollama · Pi"]
+    static let labels = ["codex": "Codex", "claude": "Claude", "openrouter": "OpenRouter", "ollama": "Ollama"]
     static let models: [String: [(id: String, label: String)]] = [
         "codex": [("gpt-6-astra", "GPT-6 Astra"), ("gpt-5.6-sol", "GPT-5.6 Sol"), ("gpt-5.6-terra", "GPT-5.6 Terra"), ("gpt-5.6-luna", "GPT-5.6 Luna"), ("gpt-5.5", "GPT-5.5")],
         "claude": [("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")],
         "openrouter": [("openrouter/free", "Free Model Router"), ("openrouter/auto", "Auto Router")],
-        "ollama": [("gemma3:1b", "Gemma3 1B · Raspberry Pi"), ("qwen3:1.7b", "Qwen3 1.7B · Raspberry Pi")],
+        "ollama": [("gemma3:1b", "Gemma3 1B"), ("qwen3:1.7b", "Qwen3 1.7B")],
     ]
 
     static func automaticMode(for provider: String) -> String {

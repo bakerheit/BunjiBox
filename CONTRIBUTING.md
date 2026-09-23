@@ -5,7 +5,8 @@ to review. Open an issue to discuss a large feature before building it.
 
 ## Set up
 
-Use macOS and Node.js 22.13 or newer. Install dependencies with `npm ci`.
+Use a supported macOS host and Node.js 22.13 or newer. Install dependencies
+with `npm ci`.
 Run `npm run api` and `npm run dev` in separate terminals for the web app, or
 `npm run bunji` for the CLI. Sign in with `codex login` or `claude auth login`
 to try a provider. See the [README](README.md) for the native app and other

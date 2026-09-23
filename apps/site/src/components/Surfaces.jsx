@@ -18,8 +18,8 @@ const surfaces = [
   {
     icon: Smartphone,
     name: 'Phone',
-    line: 'your Mac’s WiFi address',
-    body: 'The same web app over your LAN. Pick up a conversation from the couch; the run keeps going on the Mac whether or not a client is watching.',
+    line: 'the host’s local address',
+    body: 'The same web app over your LAN. Pick up a conversation from another device; the run keeps going on the host whether or not a client is watching.',
     detail: 'Folder icon opens the sidebar as a drawer',
   },
 ]

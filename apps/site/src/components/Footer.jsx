@@ -8,9 +8,12 @@ export default function Footer() {
           <Mark className="h-5 w-5" />
           BunjiBox
         </div>
-        <p className="text-sm text-neutral-500 sm:ml-auto">
-          Local agent workbench · alpha · runs on your Mac
-        </p>
+        <div className="flex flex-wrap gap-5 text-sm text-neutral-500 sm:ml-auto">
+          <span>Local agent workbench · macOS alpha</span>
+          <a className="hover:text-neutral-100" href="https://github.com/bakerheit/BunjiBox">GitHub</a>
+          <a className="hover:text-neutral-100" href="https://github.com/bakerheit/BunjiBox/blob/main/CONTRIBUTING.md">Contribute</a>
+          <a className="hover:text-neutral-100" href="https://github.com/bakerheit/BunjiBox/blob/main/LICENSE">MIT license</a>
+        </div>
       </div>
     </footer>
   )

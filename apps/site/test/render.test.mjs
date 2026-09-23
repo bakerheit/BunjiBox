@@ -31,7 +31,7 @@ test('the landing page renders every section with accurate, linked content', asy
   await t.test('the hero states the pitch and the install path', () => {
     assert.match(html, /One agent workspace/)
     assert.match(html, /Terminal, browser, phone/)
-    assert.match(html, /npm install/)
+    assert.match(html, /npm ci/)
     assert.match(html, /bunji/)
   })
 

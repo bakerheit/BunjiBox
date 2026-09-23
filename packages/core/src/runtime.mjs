@@ -15,7 +15,7 @@ const exec = promisify(execFile)
 export { runtimes, effortSteps, normalizeMode, normalizeRuntime } from '@bunji/shared/runtimes'
 export { createUsageReader } from './usage.mjs'
 export const MAX_PROMPT_LENGTH = 12000
-const DEFAULT_OLLAMA_URL = 'http://192.168.68.78:11434'
+const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434'
 
 function ollamaUrl() {
   const value = process.env.BUNJI_OLLAMA_URL || DEFAULT_OLLAMA_URL
@@ -36,7 +36,7 @@ function ollamaUsage(final) {
 async function runOllama({ model, effort, prompt }, { signal, onActivity, messages } = {}) {
   const startedAt = Date.now()
   const activities = []
-  const activity = { id: 'ollama-pi', kind: 'notice', title: 'Ollama · Raspberry Pi', status: 'running', text: 'Waiting for the Pi…' }
+  const activity = { id: 'ollama-request', kind: 'notice', title: 'Ollama', status: 'running', text: 'Waiting for Ollama…' }
   activities.push(activity); onActivity?.(activity)
   let text = '', thinking = '', final = null
   try {
@@ -73,7 +73,7 @@ async function runOllama({ model, effort, prompt }, { signal, onActivity, messag
     }
     buffer += decoder.decode()
     consume(buffer)
-    activity.status = 'complete'; activity.text = final ? 'Response received from the Pi.' : 'The Pi closed the response early.'
+    activity.status = 'complete'; activity.text = final ? 'Response received from Ollama.' : 'Ollama closed the response early.'
     onActivity?.({ ...activity })
     if (thinking) {
       const reasoning = { id: 'ollama-thinking', kind: 'reasoning', title: 'Model thinking', status: 'complete', text: thinking }
@@ -82,7 +82,7 @@ async function runOllama({ model, effort, prompt }, { signal, onActivity, messag
     if (!final || !text) return { text, usage: ollamaUsage(final), failed: true, activities, error: 'Ollama returned an empty response.', durationMs: Date.now() - startedAt }
     return { text, usage: ollamaUsage(final), failed: false, activities, durationMs: Date.now() - startedAt }
   } catch (error) {
-    const message = signal?.aborted ? 'The connection closed before the Pi finished.' : error.message
+    const message = signal?.aborted ? 'The connection closed before Ollama finished.' : error.message
     const failedActivity = { ...activity, status: 'failed', text: message }
     activities[0] = failedActivity; onActivity?.(failedActivity)
     return { text, usage: ollamaUsage(final), failed: true, activities, error: message, durationMs: Date.now() - startedAt }
@@ -93,10 +93,10 @@ export async function providerStatus(provider) {
   try {
     if (provider === 'ollama') {
       const response = await fetch(ollamaUrl() + '/api/tags', { signal: AbortSignal.timeout(3000) })
-      if (!response.ok) return { connected: false, plan: 'Raspberry Pi · Ollama unavailable' }
+      if (!response.ok) return { connected: false, plan: 'Ollama unavailable' }
       const data = await response.json()
       const models = Array.isArray(data?.models) ? data.models.map(item => item.name).filter(Boolean) : []
-      return { connected: true, plan: 'Raspberry Pi · Ollama', models }
+      return { connected: true, plan: 'Ollama', models }
     }
     if (provider === 'claude') {
       const { stdout } = await exec('claude', ['auth', 'status'], { timeout: 15000, maxBuffer: 65536 })
@@ -109,7 +109,7 @@ export async function providerStatus(provider) {
     }
     await exec('codex', ['login', 'status'], { timeout: 15000, maxBuffer: 65536 })
     return { connected: true, plan: 'ChatGPT subscription' }
-  } catch { return { connected: false, plan: 'Sign in on this Mac' } }
+  } catch { return { connected: false, plan: 'Sign in on this computer' } }
 }
 
 // The browser never supplies this configuration for a run. It comes from the

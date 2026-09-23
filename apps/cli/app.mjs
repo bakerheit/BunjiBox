@@ -224,7 +224,7 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
     `${bot.shape} ${safeText(bot.name)}`, '', ...plainLines(bot.description || 'No description yet. Press E to edit.', Math.max(1, sideWidth)), '',
     runtimes[bot.provider].label, bot.model, 'Effort · ' + bot.effort, '',
     session.connections[bot.provider]?.connected ? '● Signed in on this Mac' : '○ Sign-in needed',
-    bot.provider === 'codex' ? 'codex login' : bot.provider === 'claude' ? 'claude auth login' : 'BUNJI_OLLAMA_URL · Pi Ollama endpoint', '',
+    bot.provider === 'codex' ? 'codex login' : bot.provider === 'claude' ? 'claude auth login' : 'BUNJI_OLLAMA_URL · Ollama endpoint', '',
     ...plainLines('Memory tools are available in every chat.', Math.max(1, sideWidth)), '', ...computerDetails(bot, sideWidth), '', 'Service working directory', ...plainLines(cwd, Math.max(1, sideWidth)), '',
     '/name · /description', '/color · /shape · /computer', '', 'Bots shared with BunjiBox.', session.chatClient ? 'Chat saved on this Mac.' : 'Chat lasts for this session.',
   ]
