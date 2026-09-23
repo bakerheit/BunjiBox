@@ -1,6 +1,6 @@
 import { ArrowRight, Terminal } from 'lucide-react'
 import CodeBlock from './CodeBlock.jsx'
-import hero from '../assets/hero.png'
+import appIcon from '../../../../design/brand/bunjibox-app-icon.png'
 
 export default function Hero() {
   return (
@@ -57,11 +57,10 @@ export default function Hero() {
         </div>
 
         <div className="relative mx-auto w-full max-w-sm lg:max-w-none">
-          <div className="absolute inset-0 -z-10 scale-90 rounded-full bg-brand/25 blur-[90px]" />
           <img
-            src={hero}
-            alt="A translucent box splitting into two layers, lit from inside in purple"
-            className="w-full drop-shadow-[0_24px_60px_rgba(0,0,0,0.6)]"
+            src={appIcon}
+            alt="BunjiBox folded b app icon"
+            className="w-full drop-shadow-[0_24px_60px_rgba(0,0,0,0.45)]"
           />
         </div>
       </div>

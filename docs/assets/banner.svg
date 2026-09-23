@@ -1,12 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
   <title id="title">BunjiBox</title>
-  <desc id="desc">BunjiBox bolt mark and local agent workbench wordmark on a charcoal banner.</desc>
+  <desc id="desc">BunjiBox folded b mark and local agent workbench wordmark on a charcoal banner.</desc>
+  <defs><linearGradient id="fold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9b63ff"/><stop offset="1" stop-color="#7834ef"/></linearGradient></defs>
   <rect width="1200" height="320" rx="24" fill="#171719"/>
   <path d="M0 319h1200M0 0h1200" stroke="#34343a"/>
   <path d="M830 0v320M960 0v320M1090 0v320" stroke="#25252b"/>
   <path d="M810 320 1110 0M940 320 1200 45" stroke="#2e233c" stroke-width="2"/>
   <rect x="60" y="60" width="150" height="150" rx="30" fill="#25212e"/>
-  <path transform="translate(82 82) scale(2.2)" fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/>
+  <g transform="translate(72 64)" fill="url(#fold)">
+    <path d="M23 10 42 0c6-3 12 1 12 8v80l25 14 22-13V68l23-13v45c0 6-3 10-8 13l-30 18c-5 3-9 3-14 0l-43-25c-7-4-10-10-10-18V20c0-4 1-8 4-10Z"/>
+    <path d="m63 43 15-9c4-2 8-2 12 0l30 17-24 14-33-19v-3Z"/>
+  </g>
   <text x="244" y="145" fill="#f4f4f5" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="700" letter-spacing="-4">BunjiBox</text>
   <text x="248" y="186" fill="#b9b9c3" font-family="Inter, Arial, sans-serif" font-size="23" letter-spacing="1">LOCAL AGENT WORKBENCH</text>
   <path d="M248 222h628" stroke="#49404f"/>

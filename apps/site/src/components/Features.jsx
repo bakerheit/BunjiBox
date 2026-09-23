@@ -19,7 +19,7 @@ const features = [
   {
     icon: ShieldHalf,
     title: 'Computer access, scoped',
-    body: 'Every bot gets one of three profiles: no computer, a folder you pick, or full access to this Mac. Folder work runs inside Codex’s workspace-write sandbox. Full access asks first.',
+    body: 'Every bot gets one of three profiles: no computer, a folder you pick, or full access to the host computer. Folder work runs inside Codex’s workspace-write sandbox. Full access asks first.',
   },
   {
     icon: FolderOpen,

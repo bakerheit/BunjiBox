@@ -1,21 +1,19 @@
-# BunjiBox identity — folded b concept
+# BunjiBox identity
 
-Direction: a lowercase b and open workspace box, made from a folded ribbon.
-Violet `#863bff`; charcoal `#171719`; white `#f4f4f5`. No face, eyes, or AI sparkle.
+Bingo's folded **b** and open box is the project mark. The palette is violet
+`#863bff`, charcoal `#171719`, and off-white `#f4f4f5`. Use the mark without a
+robot face, sparkle, or unrelated bolt icon.
 
-- `bunjibox-mark.svg`: deterministic scalable two-path mark, transparent background.
-- `bunjibox-wordmark.svg`: horizontal lockup; live system text, not outlined font.
-- `preview.html`: responsive identity board, monochrome and small-size examples.
-- `bunjibox-logo-concept.png`: built-in imagegen exploration, retained as reference.
+## Assets
 
-The generated concept retained too much bloom despite a flat-color edit request.
-The shipping-ready vector proposal is authored geometry, not a raster crop. This
-does not replace the current application icon or claim trademark clearance.
+- `bingo-logo-sheet.png` is the supplied source artwork with the mark,
+  wordmark, and light/dark app icon examples. Keep it as the visual reference.
+- `bunjibox-mark.svg` is the scalable mark used for web favicons and navigation.
+- `bunjibox-wordmark.svg` is the horizontal lockup.
+- `bunjibox-app-icon.png` is a cleaned square icon derived from the supplied
+  dark app icon. The macOS bundle uses it through `BunjiBox.icns`.
+- `bunjibox-logo-concept.png` is the earlier glowing exploration, kept for
+  history. `preview.html` shows the scalable identity at different sizes.
 
-Built-in imagegen prompt: “Original minimal BunjiBox logo: a continuous folded
-elastic ribbon forming a compact lowercase b and an open workspace box. Violet
-#863bff on charcoal, friendly geometric BunjiBox wordmark, monochrome and app-icon
-examples. No face/eyes, robot head, generic cube clipart, glow, gradient or 3D.”
-Edit prompt: preserve the silhouette/layout; remove glow/bloom and make the
-wordmark white. Generated files were copied into this project, not left as dependencies
-on the imagegen cache. The concept is ready for user feedback before broad rebranding.
+The README banner, website hero, web app, and native bundle should use this
+identity. Update screenshots when visible app branding changes.

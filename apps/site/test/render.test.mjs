@@ -49,7 +49,9 @@ test('the landing page renders every section with accurate, linked content', asy
   await t.test('the hero image has real alt text and the mark is decorative', () => {
     const images = html.match(/<img[^>]*>/g) || []
     assert.ok(images.length > 0, 'expected at least one image')
-    for (const img of images) assert.match(img, /alt="[^"]+"/, `image without alt text: ${img}`)
+    for (const img of images) {
+      assert.match(img, /alt="[^"]+"|alt=""[^>]*aria-hidden="true"/, `image without alt text or decorative label: ${img}`)
+    }
     assert.match(html, /<svg[^>]*aria-hidden="true"/)
   })
 

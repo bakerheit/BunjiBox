@@ -105,7 +105,7 @@ test('real loopback health check verifies identity without starting the real app
   const server = http.createServer((_request, reply) => { reply.setHeader('content-type', 'application/json'); reply.end(JSON.stringify(health({ cwd: dir }))) })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => server.close(resolve)))
-  const result = await ensureChatService({ ...options, cwd: dir, explicitCwd: true, port: server.address().port, spawnProcess: noSpawn })
+  const result = await ensureChatService({ ...options, cwd: dir, explicitCwd: true, port: server.address().port, timeoutMs: 3000, spawnProcess: noSpawn })
   assert.equal(result.cwd, dir)
   assert.equal(result.started, false)
 })

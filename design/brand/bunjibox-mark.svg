@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 144" fill="none">
   <title>BunjiBox folded b</title>
-  <path fill="#863bff" d="M23 10 42 0c6-3 12 1 12 8v80l25 14 22-13V68l23-13v45c0 6-3 10-8 13l-30 18c-5 3-9 3-14 0l-43-25c-7-4-10-10-10-18V20c0-4 1-8 4-10Z"/>
-  <path fill="#863bff" d="m63 43 15-9c4-2 8-2 12 0l30 17-24 14-33-19v-3Z"/>
+  <defs><linearGradient id="fold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9b63ff"/><stop offset="1" stop-color="#7834ef"/></linearGradient></defs>
+  <path fill="url(#fold)" d="M23 10 42 0c6-3 12 1 12 8v80l25 14 22-13V68l23-13v45c0 6-3 10-8 13l-30 18c-5 3-9 3-14 0l-43-25c-7-4-10-10-10-18V20c0-4 1-8 4-10Z"/>
+  <path fill="url(#fold)" d="m63 43 15-9c4-2 8-2 12 0l30 17-24 14-33-19v-3Z"/>
 </svg>
