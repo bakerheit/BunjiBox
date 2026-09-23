@@ -1,6 +1,7 @@
 import Mark from './Mark.jsx'
 
 const links = [
+  { href: '#screenshots', label: 'Screenshots' },
   { href: '#surfaces', label: 'Surfaces' },
   { href: '#features', label: 'Features' },
   { href: '#memory', label: 'Memory' },

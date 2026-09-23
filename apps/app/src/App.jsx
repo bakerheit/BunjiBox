@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Activity, ArrowUp, BookOpen, Bot, Check, ChevronDown, ChevronRight, Ellipsis, FolderOpen, Gauge, Laptop2, Menu, PanelRight, Pencil, Plus, RotateCcw, Search, Settings2, Trash2, X } from 'lucide-react'
+import { Activity, ArrowUp, BookOpen, Check, ChevronDown, ChevronRight, Ellipsis, FolderOpen, Gauge, Laptop2, Menu, PanelRight, Pencil, Plus, RotateCcw, Search, Settings2, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import './App.css'
 import { Avatar, AvatarEditor, AvatarProvider } from './AvatarPicker'
@@ -90,14 +90,14 @@ function Sidebar({ bots, activeId, onSelect, onCreate, onClose, onDelete, query,
     return () => { document.removeEventListener('pointerdown', dismiss, true); document.removeEventListener('focusin', dismiss); document.removeEventListener('keydown', escape, true) }
   }, [optionsId])
   return <>
-    <div className="sidebar-heading"><span className="brand"><Bot size={19} />BunjiBox</span><Button variant="ghost" size="icon" aria-label="Create new bot" onClick={onCreate}><Plus /></Button>{onClose && <Button variant="ghost" size="icon" aria-label="Close menu" onClick={onClose}><X /></Button>}</div>
+    <div className="sidebar-heading"><span className="brand"><img src="/favicon.svg" width="20" height="20" alt="" />BunjiBox</span><Button variant="ghost" size="icon" aria-label="Create new bot" onClick={onCreate}><Plus /></Button>{onClose && <Button variant="ghost" size="icon" aria-label="Close menu" onClick={onClose}><X /></Button>}</div>
     <label className="sidebar-search"><Search size={15} /><input aria-label="Search bots" placeholder="Search" value={query} onChange={event => setQuery(event.target.value)} /></label>
     <div className="bot-list">{visibleBots.map(bot => <div key={bot.id} className={'bot-list-item ' + (page === 'chat' && activeId === bot.id ? 'selected' : '')}>
       <button aria-current={page === 'chat' && activeId === bot.id ? 'page' : undefined} className="bot-row" onClick={() => { setOptionsId(null); onSelect(bot.id) }}><Avatar tone={bot.id} /><span><strong>{bot.name || 'Untitled bot'}</strong><small>{bot.description || 'What can I take off your plate?'}</small></span></button>
       <button ref={optionsId === bot.id ? triggerRef : null} className="bot-options-trigger" aria-label={`Options for ${bot.name || 'Untitled bot'}`} aria-haspopup="menu" aria-expanded={optionsId === bot.id} onClick={() => setOptionsId(current => current === bot.id ? null : bot.id)}><Ellipsis size={18} aria-hidden="true" /></button>
     </div>)}{!visibleBots.length && <p className="quiet">No bots found.</p>}</div>
     <button className="sidebar-usage" aria-current={page === 'usage' ? 'page' : undefined} onClick={onUsage}><Gauge size={17} /><span>Usage</span></button>
-    <div className="sidebar-foot"><span className="account-initials">AB</span><span>Andrew Baker<small>Local workspace</small></span></div>
+    <div className="sidebar-foot"><span className="account-initials">B</span><span>Local workspace<small>Stored on this computer</small></span></div>
     {optionsId && bots.some(bot => bot.id === optionsId) && createPortal(<div className="bot-options-menu" role="menu" ref={optionsRef} style={{ ...optionsPosition, visibility: optionsPosition ? 'visible' : 'hidden' }}><button type="button" role="menuitem" disabled={bots.length < 2} onClick={() => { const id = optionsId; setOptionsId(null); onDelete(id) }}><Trash2 size={15} aria-hidden="true" />Delete agent</button>{bots.length < 2 && <span>Create another agent first.</span>}</div>, document.body)}
   </>
 }

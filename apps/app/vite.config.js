@@ -11,6 +11,6 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     // Preserve the browser-facing host so the API can reject cross-origin writes.
-    proxy: { '/api': { target: 'http://127.0.0.1:4318', changeOrigin: false } },
+    proxy: { '/api': { target: process.env.BUNJI_API_PROXY_TARGET || 'http://127.0.0.1:4318', changeOrigin: false } },
   },
 })

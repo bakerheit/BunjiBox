@@ -18,7 +18,8 @@ providers. No provider login is needed for most unit tests.
 2. Add or update tests when behavior changes. Run `npm test`, `npm run lint`,
    and `npm run build` before opening a pull request.
 3. Explain the problem, your fix, and how you checked it. Include screenshots
-   for UI changes and note any setup needed to reproduce them.
+   for UI changes and note any setup needed to reproduce them. Use the
+   [screenshot guide](docs/screenshots.md) when updating the README or site images.
 
 The npm workspace layout is in the README. Apps live in `apps/`; reusable code
 lives in `packages/`. Keep provider code and stored data in the shared runtime

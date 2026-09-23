@@ -10,18 +10,18 @@ Uses the repo's existing `@modelcontextprotocol/sdk` and `zod`; no install neede
 Node >=22.13 is required. Build the parent-owned helper from the main checkout:
 
 ```sh
-cd /Users/andrewbaker/workspace/BunjiBox
+cd /path/to/BunjiBox
 zsh experiments/computer-use-native/build-lab.sh
 ```
 
 Then launch the bridge:
 
 ```sh
-cd /Users/andrewbaker/workspace/BunjiBox
+cd /path/to/BunjiBox
 BUNJI_NATIVE_EXPERIMENT=1 \
-BUNJI_NATIVE_DEPENDENCY_ROOT=/Users/andrewbaker/workspace/BunjiBox \
+BUNJI_NATIVE_DEPENDENCY_ROOT="$PWD" \
 node experiments/computer-use-native-bridge/server.mjs \
-  --helper '/Users/andrewbaker/workspace/BunjiBox/experiments/computer-use-native/.build/lab/Bunji Native Lab.app/Contents/MacOS/BunjiNativeLab' \
+  --helper "$PWD/experiments/computer-use-native/.build/lab/Bunji Native Lab.app/Contents/MacOS/BunjiNativeLab" \
   --target fixture
 ```
 
@@ -39,15 +39,15 @@ does not contain Node):
     "bunji-native-experiment": {
       "command": "node",
       "args": [
-        "/Users/andrewbaker/workspace/BunjiBox/experiments/computer-use-native-bridge/server.mjs",
+        "/absolute/path/to/BunjiBox/experiments/computer-use-native-bridge/server.mjs",
         "--helper",
-        "/Users/andrewbaker/workspace/BunjiBox/experiments/computer-use-native/.build/lab/Bunji Native Lab.app/Contents/MacOS/BunjiNativeLab",
+        "/absolute/path/to/BunjiBox/experiments/computer-use-native/.build/lab/Bunji Native Lab.app/Contents/MacOS/BunjiNativeLab",
         "--target",
         "fixture"
       ],
       "env": {
         "BUNJI_NATIVE_EXPERIMENT": "1",
-        "BUNJI_NATIVE_DEPENDENCY_ROOT": "/Users/andrewbaker/workspace/BunjiBox"
+        "BUNJI_NATIVE_DEPENDENCY_ROOT": "/absolute/path/to/BunjiBox"
       }
     }
   }
@@ -142,9 +142,9 @@ trusted host code, not tools exposed to models.
 ## Test
 
 ```sh
-cd /Users/andrewbaker/workspace/BunjiBox
+cd /path/to/BunjiBox
 BUNJI_NATIVE_EXPERIMENT=1 \
-BUNJI_NATIVE_DEPENDENCY_ROOT=/Users/andrewbaker/workspace/BunjiBox \
+BUNJI_NATIVE_DEPENDENCY_ROOT="$PWD" \
 node --test experiments/computer-use-native-bridge/test/bridge.test.mjs
 ```
 

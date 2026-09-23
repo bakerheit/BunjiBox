@@ -1,4 +1,13 @@
-# BunjiBox
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="BunjiBox — local agent workbench" width="100%" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/bakerheit/BunjiBox/actions/workflows/ci.yml"><img src="https://github.com/bakerheit/BunjiBox/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  &nbsp; <a href="LICENSE">MIT license</a>
+  &nbsp; · &nbsp; <a href="CONTRIBUTING.md">Contribute</a>
+  &nbsp; · &nbsp; <a href="SECURITY.md">Security</a>
+</p>
 
 BunjiBox is an open source agent workbench with a web app, terminal client, and
 native macOS client. It connects to locally signed-in Codex and Claude CLIs,
@@ -8,6 +17,19 @@ The clients share a local workspace and a single provider runtime. BunjiBox is
 under active development. See the [contribution guide](CONTRIBUTING.md),
 [security policy](SECURITY.md), and [MIT license](LICENSE).
 Chats are stored locally; requests sent to hosted providers leave your network.
+
+## Screenshots
+
+These show the web client in a disposable local workspace with a sample PR
+review exchange. The phone view uses the same conversation and workspace.
+
+**Desktop workbench**
+
+<img src="docs/assets/web-desktop.png" alt="BunjiBox desktop workbench showing an agent conversation, model controls, and the files sidebar" width="100%" />
+
+**Phone view**
+
+<img src="docs/assets/web-mobile.jpg" alt="BunjiBox phone view showing the same agent conversation and compact composer" width="320" />
 
 ## Platform support
 
