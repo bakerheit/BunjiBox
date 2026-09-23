@@ -2,6 +2,28 @@
 
 BunjiBox is a local agent workbench for Claude, Codex, OpenRouter, and a temporary Ollama endpoint. It uses the subscription-backed CLIs already signed in on the Mac, calls OpenRouter with a user-supplied API key, and can run Ollama on another trusted LAN device such as a Raspberry Pi.
 
+This is an early, Mac-focused open source project. The web app, CLI, and native
+client share one local workspace. See [Contributing](CONTRIBUTING.md) to get
+started, [Security](SECURITY.md) for vulnerability reports, and the
+[MIT license](LICENSE) for reuse terms.
+
+## Quick start
+
+You need macOS, Node.js 22.13 or newer, npm, and at least one signed-in provider:
+`codex login` or `claude auth login`. The native app also needs Swift Package
+Manager. OpenRouter and Ollama are optional.
+
+```bash
+git clone https://github.com/bakerheit/BunjiBox.git
+cd BunjiBox
+npm ci
+npm run api
+```
+
+In another terminal, run `npm run dev` and open `http://localhost:5173/`.
+For a terminal-only start, use `npm run bunji`. The API listens on
+`127.0.0.1:4318`; keep both terminals running for the web app.
+
 ## Repo layout
 
 npm workspaces, one lockfile, no build graph tool. Every package is private.
