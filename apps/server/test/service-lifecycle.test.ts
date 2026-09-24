@@ -12,7 +12,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { openChatStore } from '@bunji/core/chat-store'
 import { ensureChatService } from '@bunji/cli/service'
 
-const entry = fileURLToPath(new URL('../server.mjs', import.meta.url))
+const entry = fileURLToPath(new URL('../src/main.ts', import.meta.url))
 const fingerprint = directory => createHash('sha256').update(directory).digest('hex')
 const seed = (id, extra = {}) => ({ id, botId: 'bunjibox', prompt: 'A test-only message. No provider should run.', provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', ...extra })
 

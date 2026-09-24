@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openBotStore } from '@bunji/core/bot-store'
-import { createBotRoutes } from './bots.mjs'
+import { createBotRoutes } from '../src/routes/bots.ts'
 
 async function fixture(t, { legacy = false } = {}) {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'bunji-agent-permissions-')))

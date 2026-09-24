@@ -27,14 +27,14 @@ final class BunjiServiceController {
     private func repositoryURL() -> URL? {
         let manager = FileManager.default
         if let explicit = ProcessInfo.processInfo.environment["BUNJI_REPO_ROOT"],
-           manager.fileExists(atPath: explicit + "/apps/server/server.mjs") {
+           manager.fileExists(atPath: explicit + "/apps/server/package.json") {
             return URL(fileURLWithPath: explicit, isDirectory: true)
         }
         let common = manager.homeDirectoryForCurrentUser.appending(path: "workspace/BunjiBox", directoryHint: .isDirectory)
-        if manager.fileExists(atPath: common.appending(path: "apps/server/server.mjs").path) { return common }
+        if manager.fileExists(atPath: common.appending(path: "apps/server/package.json").path) { return common }
         var current = URL(fileURLWithPath: manager.currentDirectoryPath, isDirectory: true)
         while current.path != "/" {
-            if manager.fileExists(atPath: current.appending(path: "apps/server/server.mjs").path) { return current }
+            if manager.fileExists(atPath: current.appending(path: "apps/server/package.json").path) { return current }
             current.deleteLastPathComponent()
         }
         return nil

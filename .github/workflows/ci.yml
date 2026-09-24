@@ -11,9 +11,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.13.1'
+          # The minimum supported Node: the first 22.x line that strips
+          # TypeScript types by default. Keep in sync with package.json engines.
+          node-version: '22.18.0'
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build

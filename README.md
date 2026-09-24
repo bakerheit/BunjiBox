@@ -41,7 +41,7 @@ without using the in-app key store.
 
 ## Quick start
 
-On a supported macOS host, install Node.js 22.13 or newer and npm. Sign in to
+On a supported macOS host, install Node.js 22.18 or newer and npm. Sign in to
 at least one provider with `codex login` or `claude auth login`, or configure
 OpenRouter or Ollama as described below. The native client also needs Swift
 Package Manager.
@@ -60,7 +60,10 @@ For a terminal-only start, use `npm run bunji`. The API listens on
 ## Repo layout
 
 npm workspaces, one lockfile, no build graph tool. Workspace packages are marked
-private because they are not published to npm.
+private because they are not published to npm. Everything except the Swift app
+and `experiments/` is TypeScript. Node runs the `.ts` files directly with its
+built-in type stripping, so the server, CLI, and packages have no build step;
+`npm run typecheck` checks types and Vite builds the two web apps.
 
 ```
 apps/app       @bunji/app      workbench UI (Vite + React)
@@ -75,13 +78,14 @@ packages/ui    @bunji/ui       design tokens shared by the app and the site
 
 Dependencies only ever point downward: apps depend on packages, `core` depends
 on `shared`, and `shared` depends on nothing. The root package owns the `bunji`
-bin so `npm link` keeps working.
+bin so `npm link` keeps working. See [docs/architecture.md](docs/architecture.md)
+for how requests, storage, and the security boundaries fit together.
 
 ## Run it
 
 ### Terminal app
 
-Requires Node.js 22.13 or newer and locally installed `codex` / `claude` CLIs.
+Requires Node.js 22.18 or newer and locally installed `codex` / `claude` CLIs.
 
 ```bash
 npm ci
@@ -247,9 +251,9 @@ Deleting an agent does not delete its created files from disk.
 
 ## Shared runtime and sign-in
 
-The terminal and HTTP bridge share `packages/core/src/runtime.mjs`: provider
+The terminal and HTTP bridge share `packages/core/src/runtime.ts`: provider
 commands, model/effort validation, login checks, activity streams, and token
-accounting. Subscription meters share `packages/core/src/usage.mjs`. The browser
+accounting. Subscription meters share `packages/core/src/usage.ts`. The browser
 model catalog is also used by the terminal. No second copy of the agent runner
 is needed.
 
@@ -277,6 +281,14 @@ This is a LAN-only alpha. Do not expose the dev server to the public internet.
 There is no account or device authentication: anyone who can reach the web app
 on your network can enable full access and send commands through a bot. Use only
 on a trusted network.
+
+The local API only answers requests addressed to an IP address, `localhost`, or
+a `*.localhost` name, the same default as the Vite dev server. This blocks DNS
+rebinding from web pages you visit. If you reach BunjiBox through another host
+name that you also added to Vite's `server.allowedHosts`, list it in
+`BUNJI_ALLOWED_HOSTS` before starting the API, for example
+`BUNJI_ALLOWED_HOSTS=studio.lan npm run api`. A leading dot, such as `.lan`,
+also allows its subdomains.
 
 ## Ongoing conversations and agent memory
 

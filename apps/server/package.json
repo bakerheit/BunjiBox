@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local-only HTTP bridge on 127.0.0.1:4318 that the web app talks to.",
-  "main": "./server.mjs",
+  "description": "Local-only HTTP API on 127.0.0.1:4318 shared by the web app, CLI and native client.",
+  "main": "./src/main.ts",
   "scripts": {
-    "start": "node server.mjs",
-    "test": "node --test src/*.test.mjs"
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p . && tsc -p test"
   },
   "dependencies": {
     "@bunji/core": "*",

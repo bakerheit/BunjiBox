@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { setImmediate as tick } from 'node:timers/promises'
 import { createAvatarGenerations } from '@bunji/core/avatar-generation'
-import { createAvatarGenerationRoutes } from './avatar-generations.mjs'
+import { createAvatarGenerationRoutes } from '../src/routes/avatar-generations.ts'
 
 const id = 'avatar-http-test-0001'
 const basePath = '/api/avatar-generations'

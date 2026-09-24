@@ -9,8 +9,8 @@ import { openBotStore } from '@bunji/core/bot-store'
 import { openChatStore } from '@bunji/core/chat-store'
 import { openMemoryStore } from '@bunji/core/memory-store'
 import { createChatService } from '@bunji/core/chat-service'
-import { createContinuityRoutes } from './continuity.mjs'
-import { createBotRoutes } from './bots.mjs'
+import { createContinuityRoutes } from '../src/routes/continuity.ts'
+import { createBotRoutes } from '../src/routes/bots.ts'
 
 const directory = await mkdtemp(join(await realpath(tmpdir()), 'bunji-memory-ui-'))
 const path = join(directory, 'workspace.sqlite'), bots = openBotStore({ path }), chats = openChatStore({ path })

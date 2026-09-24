@@ -1,7 +1,7 @@
 import http from 'node:http'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createProviderRoutes } from './providers.mjs'
+import { createProviderRoutes } from '../src/routes/providers.ts'
 
 async function serve(handler) {
   const server = http.createServer(async (request, response) => { if (!await handler(request, response)) { response.statusCode = 404; response.end() } })
