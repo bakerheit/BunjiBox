@@ -1,4 +1,4 @@
-import Mark from './Mark.jsx'
+import Mark from './Mark.tsx'
 
 export default function Footer() {
   return (

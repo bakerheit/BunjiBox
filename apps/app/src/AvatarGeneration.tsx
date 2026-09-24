@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { avatarGenerationRequest, cancelAvatarGeneration, normalizeAvatarImage } from './avatar-generation'
+import type { AvatarGenerationAction, AvatarGenerationJob, AvatarGenerationStatus, AvatarRequestError } from './avatar-generation'
 
-function waitForPoll(signal) {
-  return new Promise((resolve, reject) => {
+interface GenerationState {
+  phase: 'idle' | 'running' | 'resizing' | 'cancelling' | 'cancelled' | 'failed' | 'error' | 'complete' | 'applied'
+  message?: string
+  error?: string
+  image?: string
+  retryAction?: AvatarGenerationAction
+}
+
+interface Attempt {
+  job: AvatarGenerationJob
+  action: AvatarGenerationAction
+  creation: Promise<AvatarGenerationStatus> | null
+}
+
+function waitForPoll(signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
     const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')) }
     const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve() }, 1500)
     if (signal.aborted) abort()
@@ -22,13 +37,19 @@ function newRequestId() {
 
 // Mounted only for the current agent's Generate tab. All results stay local
 // until the user explicitly applies a normalized picture.
-export default function AvatarGeneration({ id, onUse }) {
+interface AvatarGenerationProps {
+  id: string
+  /** Returns whether the picture was saved. */
+  onUse: (image: string) => boolean
+}
+
+export default function AvatarGeneration({ id, onUse }: AvatarGenerationProps) {
   const [prompt, setPrompt] = useState('')
-  const [attempt, setAttempt] = useState(null)
-  const [state, setState] = useState({ phase: 'idle' })
-  const active = useRef(null)
-  const pendingJob = useRef(null)
-  const creation = useRef(null)
+  const [attempt, setAttempt] = useState<Attempt | null>(null)
+  const [state, setState] = useState<GenerationState>({ phase: 'idle' })
+  const active = useRef<AbortController | null>(null)
+  const pendingJob = useRef<AvatarGenerationJob | null>(null)
+  const creation = useRef<Promise<AvatarGenerationStatus> | null>(null)
 
   useEffect(() => () => {
     active.current?.abort()
@@ -45,7 +66,7 @@ export default function AvatarGeneration({ id, onUse }) {
     let retryAction = attempt.action
     const run = async () => {
       try {
-        let generation = attempt.action === 'start' ? await attempt.creation
+        let generation = attempt.action === 'start' ? await attempt.creation!
           : cancelling ? await cancelAvatarGeneration(attempt.job, attempt.creation, signal)
             : await avatarGenerationRequest(attempt.job, 'poll', signal)
         while (!signal.aborted) {
@@ -64,12 +85,13 @@ export default function AvatarGeneration({ id, onUse }) {
           } else {
             retryAction = 'poll'
             setState({ phase: 'resizing' })
-            const image = await normalizeAvatarImage(generation.image)
+            const image = await normalizeAvatarImage(generation.image!)
             if (!signal.aborted) setState({ phase: 'complete', image })
           }
           return
         }
-      } catch (error) {
+      } catch (caught) {
+        const error = caught as AvatarRequestError
         if (!signal.aborted) {
           if (cancelling && error.status === 404) {
             pendingJob.current = null
@@ -78,7 +100,7 @@ export default function AvatarGeneration({ id, onUse }) {
           }
           // An expired preview or rejected creation needs a new request, while
           // an ambiguous response must keep the original ID for retry.
-          const rejected = !cancelling && (error.status === 404 || (retryAction === 'start' && [400, 401, 403, 409, 429].includes(error.status)))
+          const rejected = !cancelling && (error.status === 404 || (retryAction === 'start' && error.status !== undefined && [400, 401, 403, 409, 429].includes(error.status)))
           if (rejected) pendingJob.current = null
           setState({ phase: rejected ? 'failed' : 'error', error: error.message || 'Could not connect to avatar generation.', retryAction })
         }
@@ -88,7 +110,7 @@ export default function AvatarGeneration({ id, onUse }) {
     return () => controller.abort()
   }, [attempt])
 
-  const perform = (job, action) => {
+  const perform = (job: AvatarGenerationJob, action: AvatarGenerationAction) => {
     active.current?.abort()
     pendingJob.current = job
     if (action === 'start') {
@@ -108,7 +130,7 @@ export default function AvatarGeneration({ id, onUse }) {
   const unresolved = busy || state.phase === 'error'
   const usePicture = () => {
     if (state.phase !== 'complete' || active.current?.signal.aborted) return
-    if (onUse(state.image)) setState({ phase: 'applied', image: state.image })
+    if (onUse(state.image!)) setState({ phase: 'applied', image: state.image })
   }
 
   return <div className="bb-avatar-generation">
@@ -130,8 +152,8 @@ export default function AvatarGeneration({ id, onUse }) {
     {state.error && <div className="bb-avatar-error" role="alert"><p>{state.error}</p><p>{state.phase === 'error' ? 'Check your connection and ChatGPT sign-in, then retry. Retrying reconnects to this request.' : 'Check your ChatGPT sign-in or edit the prompt, then try again.'}</p></div>}
     <div className="bb-avatar-generation-actions">
       {!unresolved && <button type="button" className="bb-avatar-generate-button" disabled={!prompt.trim()} onClick={generate}>{state.phase === 'idle' ? 'Generate' : state.phase === 'failed' || state.phase === 'cancelled' ? 'Try again' : 'Generate again'}</button>}
-      {state.phase === 'error' && <button type="button" className="bb-avatar-generate-button" onClick={() => perform(attempt.job, state.retryAction)}>{state.retryAction === 'cancel' ? 'Retry cancellation' : 'Retry connection'}</button>}
-      {unresolved && state.phase !== 'cancelling' && state.retryAction !== 'cancel' && <button type="button" className="bb-avatar-cancel-button" onClick={() => perform(attempt.job, 'cancel')}>Cancel</button>}
+      {state.phase === 'error' && <button type="button" className="bb-avatar-generate-button" onClick={() => perform(attempt!.job, state.retryAction!)}>{state.retryAction === 'cancel' ? 'Retry cancellation' : 'Retry connection'}</button>}
+      {unresolved && state.phase !== 'cancelling' && state.retryAction !== 'cancel' && <button type="button" className="bb-avatar-cancel-button" onClick={() => perform(attempt!.job, 'cancel')}>Cancel</button>}
       {state.phase === 'complete' && <button type="button" className="bb-avatar-use-button" onClick={usePicture}>Use this picture</button>}
     </div>
     <p className="bb-avatar-upload-help">Leaving this tab discards the preview and requests cancellation of any pending generation.</p>

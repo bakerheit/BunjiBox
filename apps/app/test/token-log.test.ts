@@ -14,7 +14,7 @@ test('request details distinguish estimates, exact provider counts, unavailable 
     server: { middlewareMode: true, hmr: false, ws: false, watch: null }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom',
   })
   try {
-    const { default: TokenLog } = await vite.ssrLoadModule('/src/TokenLog.jsx')
+    const { default: TokenLog } = await vite.ssrLoadModule('/src/TokenLog.tsx')
     const request = {
       id: 'codex-record', serverId: 'codex-record', provider: 'codex', modelLabel: 'GPT-5.6 Luna', effort: 'low',
       status: 'complete', startedAt: Date.now(), durationMs: 9727, preview: 'Hi, you are Chip2', activities: [], contextTurns: 0, omittedTurns: 0, memoryWrite: true,

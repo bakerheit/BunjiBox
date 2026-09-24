@@ -16,7 +16,7 @@ test('the landing page renders every section with accurate, linked content', asy
   })
   let html
   try {
-    const { default: App } = await vite.ssrLoadModule('/src/App.jsx')
+    const { default: App } = await vite.ssrLoadModule('/src/App.tsx')
     html = renderToStaticMarkup(createElement(App))
   } finally {
     await vite.close()

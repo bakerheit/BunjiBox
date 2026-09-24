@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 const note = [
   '---',
   'id: "tea"',
@@ -11,7 +13,7 @@ const note = [
 
 // Just enough colour to read as a file. A real highlighter would be more code
 // than the eight lines it renders.
-function highlight(line) {
+function highlight(line: string) {
   if (line === '---') return <span className="text-neutral-600">{line}</span>
   const colon = line.indexOf(':')
   if (colon > 0 && !line.includes('[[')) {
@@ -25,7 +27,7 @@ function highlight(line) {
   return <span className="text-neutral-300">{line || ' '}</span>
 }
 
-function Code({ children }) {
+function Code({ children }: { children: ReactNode }) {
   return (
     <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[13px] text-neutral-300">{children}</code>
   )

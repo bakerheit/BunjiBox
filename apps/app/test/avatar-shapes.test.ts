@@ -8,7 +8,7 @@ import { distinctAvatarShapes } from '../../../packages/shared/src/avatars.ts'
 test('web renderer uses distinct geometry and apertures while retaining legacy eyes and images', async () => {
   const server = await createServer({ root: new URL('..', import.meta.url).pathname, server: { middlewareMode: true, hmr: false }, appType: 'custom' })
   try {
-    const { BotAvatar, AvatarProvider, AvatarEditor } = await server.ssrLoadModule('/src/AvatarPicker.jsx')
+    const { BotAvatar, AvatarProvider, AvatarEditor } = await server.ssrLoadModule('/src/AvatarPicker.tsx')
     const picker = renderToStaticMarkup(createElement(AvatarProvider, {}, createElement(AvatarEditor)))
     for (const shape of distinctAvatarShapes) assert.ok(picker.includes(`aria-label="${shape.label} shape"`))
     for (const label of ['Avatar', 'Generate', 'Upload']) assert.ok(picker.includes(`>${label}</button>`))

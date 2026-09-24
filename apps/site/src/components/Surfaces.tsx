@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Monitor, Smartphone, TerminalSquare } from 'lucide-react'
 
 const surfaces = [
@@ -59,7 +60,7 @@ export default function Surfaces() {
   )
 }
 
-function Code({ children }) {
+function Code({ children }: { children: ReactNode }) {
   return (
     <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[13px] text-neutral-300">{children}</code>
   )

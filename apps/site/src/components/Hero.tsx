@@ -1,5 +1,5 @@
 import { ArrowRight, Terminal } from 'lucide-react'
-import CodeBlock from './CodeBlock.jsx'
+import CodeBlock from './CodeBlock.tsx'
 import appIcon from '../../../../design/brand/bunjibox-app-icon.png'
 
 export default function Hero() {

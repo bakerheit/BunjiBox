@@ -1,4 +1,4 @@
-import Mark from './Mark.jsx'
+import Mark from './Mark.tsx'
 
 const links = [
   { href: '#screenshots', label: 'Screenshots' },

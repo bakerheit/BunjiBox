@@ -1,45 +1,54 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronRight, Download, File, FileArchive, FileCode2, FileImage, FileSpreadsheet, FileText, FolderOpen, Grid2X2, List, RefreshCw, Search, X } from 'lucide-react'
+import { errorMessage } from '@bunji/shared/errors'
+import type { AgentFile, FilePreview } from '@bunji/shared/types'
 import Markdown from './Markdown'
 import './FilesPanel.css'
 
 const code = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'html', 'css', 'json', 'yaml', 'yml', 'toml', 'sh', 'sql', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'xml'])
 const sheets = new Set(['csv', 'tsv', 'xlsx', 'xls', 'ods'])
-function category(file) { return file.preview === 'image' || file.extension === 'svg' ? 'images' : code.has(file.extension) ? 'code' : sheets.has(file.extension) ? 'sheets' : 'documents' }
-function FileIcon({ file, size = 52 }) {
+function category(file: AgentFile) { return file.preview === 'image' || file.extension === 'svg' ? 'images' : code.has(file.extension) ? 'code' : sheets.has(file.extension) ? 'sheets' : 'documents' }
+function FileIcon({ file, size = 52 }: { file: AgentFile; size?: number }) {
   const Icon = file.preview === 'image' ? FileImage : code.has(file.extension) ? FileCode2 : sheets.has(file.extension) ? FileSpreadsheet : ['zip', 'gz', 'tar', '7z'].includes(file.extension) ? FileArchive : ['pdf', 'docx', 'md', 'txt'].includes(file.extension) ? FileText : File
   return <Icon size={size} strokeWidth={1.25} aria-hidden="true" />
 }
-const sizeLabel = bytes => bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`
-const fileUrl = (botId, id, action) => `/api/bots/${encodeURIComponent(botId)}/files/${encodeURIComponent(id)}/${action}`
-async function readJson(url, signal) {
+const sizeLabel = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`
+const fileUrl = (botId: string, id: string, action: string) => `/api/bots/${encodeURIComponent(botId)}/files/${encodeURIComponent(id)}/${action}`
+async function readJson<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) })
-  const body = await response.json()
+  const body = await response.json() as T & { error?: string }
   if (!response.ok) throw new Error(body.error || 'Could not load files.')
   return body
 }
 
-export default function FilesPanel({ botId, botName, onClose, onSettings }) {
-  const [files, setFiles] = useState(null)
+interface FilesPanelProps {
+  botId: string
+  botName: string
+  onClose: () => void
+  onSettings: () => void
+}
+
+export default function FilesPanel({ botId, botName, onClose, onSettings }: FilesPanelProps) {
+  const [files, setFiles] = useState<AgentFile[] | null>(null)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [layout, setLayout] = useState('grid')
   const [sort, setSort] = useState('recent')
-  const [selected, setSelected] = useState(null)
-  const [detail, setDetail] = useState(null)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [detail, setDetail] = useState<FilePreview | null>(null)
   const [previewError, setPreviewError] = useState('')
-  const heading = useRef(null)
+  const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     const controller = new AbortController()
-    let timer
+    let timer: ReturnType<typeof setTimeout> | undefined
     const load = async () => {
       try {
-        const data = await readJson(`/api/bots/${encodeURIComponent(botId)}/files`, controller.signal)
+        const data = await readJson<{ files?: AgentFile[] }>(`/api/bots/${encodeURIComponent(botId)}/files`, controller.signal)
         if (!Array.isArray(data.files)) throw new Error('Bunji returned an incomplete file list.')
         if (!controller.signal.aborted) { setFiles(data.files); setError('') }
-      } catch (cause) { if (!controller.signal.aborted) setError(cause.message || 'Cannot reach Bunji.') }
+      } catch (cause) { if (!controller.signal.aborted) setError(errorMessage(cause) || 'Cannot reach Bunji.') }
       finally { if (!controller.signal.aborted) timer = setTimeout(load, 3500) }
     }
     void load()
@@ -51,15 +60,16 @@ export default function FilesPanel({ botId, botName, onClose, onSettings }) {
   useEffect(() => {
     if (!selected) return
     const controller = new AbortController()
-    readJson(fileUrl(botId, selected, 'preview'), controller.signal).then(data => {
+    readJson<FilePreview>(fileUrl(botId, selected, 'preview'), controller.signal).then(data => {
       if (!controller.signal.aborted) setDetail(data)
-    }).catch(cause => { if (!controller.signal.aborted) setPreviewError(cause.message || 'Could not preview this file.') })
+    }).catch((cause: unknown) => { if (!controller.signal.aborted) setPreviewError(errorMessage(cause) || 'Could not preview this file.') })
     heading.current?.focus()
     return () => controller.abort()
   }, [botId, selected, version, available])
-  const selectFile = id => { setDetail(null); setPreviewError(''); setSelected(id) }
+  const selectFile = (id: string) => { setDetail(null); setPreviewError(''); setSelected(id) }
   const shown = (files || []).filter(file => (filter === 'all' || category(file) === filter) && `${file.name} ${file.path}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : b.updatedAt - a.updatedAt)
+  // Always set once a preview (detail) has loaded.
   const file = detail?.file || selectedFile
   return <section className="files-panel" aria-label={`${botName} files`}>
     <header className="panel-heading">
@@ -70,14 +80,14 @@ export default function FilesPanel({ botId, botName, onClose, onSettings }) {
     {selected ? <div className="files-preview panel-scroll">
       {file && <><div className={`file-preview-identity ${category(file)}`}><FileIcon file={file} size={34} /><div><h3>{file.name}</h3><span>{file.extension.toUpperCase() || 'FILE'} · {sizeLabel(file.size)}</span></div></div><p className="file-location">{file.path}</p></>}
       {previewError ? <div role="alert" className="files-error">{previewError}</div> : !detail ? <p role="status" className="files-muted">Loading preview…</p> : <>
-        <a className="file-download" href={fileUrl(botId, selected, 'download')} download={file.name}><Download size={15} />Download file</a>
+        <a className="file-download" href={fileUrl(botId, selected, 'download')} download={file!.name}><Download size={15} />Download file</a>
         <div className="file-preview-content">
-          {file.preview === 'image' ? <img src={fileUrl(botId, selected, 'content') + '?v=' + version} alt={file.name} onError={() => setPreviewError('Image preview is unavailable. Try refreshing the file list.')} />
-            : detail.text !== null ? file.preview === 'markdown' ? <Markdown text={detail.text} /> : <pre tabIndex={0}>{detail.text}</pre>
-              : <div className="file-no-preview"><FileIcon file={file} /><p>Download this file to open it in its app.</p></div>}
+          {file!.preview === 'image' ? <img src={fileUrl(botId, selected, 'content') + '?v=' + version} alt={file!.name} onError={() => setPreviewError('Image preview is unavailable. Try refreshing the file list.')} />
+            : detail.text !== null ? file!.preview === 'markdown' ? <Markdown text={detail.text} /> : <pre tabIndex={0}>{detail.text}</pre>
+              : <div className="file-no-preview"><FileIcon file={file!} /><p>Download this file to open it in its app.</p></div>}
         </div>
         {detail.truncated && <p className="files-muted">Showing the first 128 KB. Download for the full file.</p>}
-        <p className="files-muted">Updated {new Date(file.updatedAt).toLocaleString()}</p>
+        <p className="files-muted">Updated {new Date(file!.updatedAt).toLocaleString()}</p>
       </>}
     </div> : <>
       <div className="files-controls"><label className="files-search"><Search size={14} /><input aria-label="Search agent files" placeholder="Search files…" value={query} onChange={event => setQuery(event.target.value)} /></label>

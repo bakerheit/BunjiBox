@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { messageBubbleStyle } from '../src/message-bubble.js'
+import { messageBubbleStyle } from '../src/message-bubble.ts'
 
 test('only assistant bubbles use avatar color; malformed and white colors stay neutral', () => {
   for (const color of ['#ee1734', '#087ee7', '#ffffff', 'invalid']) {

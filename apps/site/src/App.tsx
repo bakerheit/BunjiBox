@@ -1,11 +1,11 @@
-import Nav from './components/Nav.jsx'
-import Hero from './components/Hero.jsx'
-import Screenshots from './components/Screenshots.jsx'
-import Surfaces from './components/Surfaces.jsx'
-import Features from './components/Features.jsx'
-import Memory from './components/Memory.jsx'
-import Install from './components/Install.jsx'
-import Footer from './components/Footer.jsx'
+import Nav from './components/Nav.tsx'
+import Hero from './components/Hero.tsx'
+import Screenshots from './components/Screenshots.tsx'
+import Surfaces from './components/Surfaces.tsx'
+import Features from './components/Features.tsx'
+import Memory from './components/Memory.tsx'
+import Install from './components/Install.tsx'
+import Footer from './components/Footer.tsx'
 
 export default function App() {
   return (

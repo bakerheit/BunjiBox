@@ -13,7 +13,7 @@ import { BunjiSession } from '@bunji/cli/session'
 import { createBotRoutes } from '../src/routes/bots.ts'
 import { botTransport, readLegacyBots } from '@bunji/shared/bot-api'
 import { createServer as createViteServer } from 'vite'
-import viteConfig from '@bunji/app/vite.config.js'
+import viteConfig from '@bunji/app/vite.config'
 
 async function directory(t) {
   const dir = await mkdtemp(join(tmpdir(), 'bunji-shared-test-'))

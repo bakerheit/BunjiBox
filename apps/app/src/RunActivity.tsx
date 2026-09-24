@@ -1,8 +1,15 @@
 import { Brain, ChevronRight, Terminal, ListChecks } from 'lucide-react'
+import type { Activity, RequestStatus } from '@bunji/shared/types'
 import Markdown from './Markdown'
 import './RunActivity.css'
 
-export default function RunActivity({ activities = [], status, limited = false }) {
+interface RunActivityProps {
+  activities?: Activity[]
+  status?: RequestStatus
+  limited?: boolean
+}
+
+export default function RunActivity({ activities = [], status, limited = false }: RunActivityProps) {
   const tools = activities.filter(item => item.kind === 'tool').length
   const thoughts = activities.filter(item => item.kind === 'reasoning').length
   const running = status === 'running'

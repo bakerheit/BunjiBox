@@ -1,49 +1,90 @@
 /* oxlint-disable react/only-export-components -- Keep testable helpers in this owned file; shared files are out of scope. */
 import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react'
+import type { FormEvent, Ref, RefObject } from 'react'
 import { ArrowLeft, BookOpen, ChevronsRight, FileText, Link2, Pencil, Plus, RefreshCw, Save, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { errorMessage } from '@bunji/shared/errors'
+import type { MemoryNoteSummary } from '@bunji/shared/types'
 import Markdown from './Markdown'
 import './MemoryPanel.css'
 
-function noteId(value) {
+/** A link to another note, normalized from a note ID or a link object. */
+export interface NoteLink {
+  id: string
+  title: string
+}
+
+/**
+ * A memory note as the panel holds it. The server sends links as note IDs and
+ * string revisions; the panel also accepts link objects and integer revisions.
+ * List entries have no body.
+ */
+export type PanelNote = Omit<MemoryNoteSummary, 'links' | 'revision'> & {
+  links: NoteLink[]
+  revision: string | number
+  body?: string
+}
+
+/** A note read in full. */
+export type FullNote = PanelNote & { body: string }
+
+/** The note fields the editor keeps: identity, revision and text. */
+export type EditableNote = Pick<PanelNote, 'id' | 'title' | 'revision' | 'updatedAt'> & { body: string }
+
+export interface Draft {
+  title: string
+  body: string
+}
+
+type Fetcher = (input: string, init: RequestInit) => Promise<Response>
+
+/** Any note-like value with links, normalized or as the server sent them. */
+interface LinkedNote {
+  id: string
+  title?: string
+  links?: unknown
+}
+
+function noteId(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
-function linksOf(links) {
-  const unique = new Map()
-  for (const link of Array.isArray(links) ? links : []) {
+function linksOf(links: unknown): NoteLink[] {
+  const unique = new Map<string, NoteLink>()
+  for (const link of (Array.isArray(links) ? links : []) as ({ id?: unknown; noteId?: unknown; targetId?: unknown; title?: unknown } | string | null)[]) {
     const id = noteId(typeof link === 'string' ? link : link?.id ?? link?.noteId ?? link?.targetId)
-    if (id && !unique.has(id)) unique.set(id, { id, title: typeof link?.title === 'string' ? link.title : '' })
+    if (id && !unique.has(id)) unique.set(id, { id, title: typeof link !== 'string' && typeof link?.title === 'string' ? link.title : '' })
   }
   return [...unique.values()]
 }
 
-function readNote(note, full = false) {
+function readNote(value: unknown, full = false): PanelNote {
+  const note = value as Record<string, unknown> | null | undefined
   const revision = note?.revision
-  if (!noteId(note?.id) || typeof note.title !== 'string'
-    || !(typeof revision === 'string' && revision.length > 0 || Number.isInteger(revision) && revision >= 0)
-    || full && typeof note.body !== 'string') throw new Error('The server returned an incomplete memory note.')
-  return { ...note, links: linksOf(note.links), sourceMessageIds: Array.isArray(note.sourceMessageIds) ? note.sourceMessageIds.filter(id => typeof id === 'string') : [] }
+  if (!noteId(note?.id) || typeof note!.title !== 'string'
+    || !(typeof revision === 'string' && revision.length > 0 || Number.isInteger(revision) && (revision as number) >= 0)
+    || full && typeof note!.body !== 'string') throw new Error('The server returned an incomplete memory note.')
+  return { ...note, links: linksOf(note!.links), sourceMessageIds: Array.isArray(note!.sourceMessageIds) ? note!.sourceMessageIds.filter(id => typeof id === 'string') : [] } as PanelNote
 }
 
 // Keep the API boundary here so the parent can adjust the adapter without changing the UI.
-export function createMemoryApi(botId, fetcher = (...args) => fetch(...args)) {
+export function createMemoryApi(botId: string, fetcher: Fetcher = (...args) => fetch(...args)) {
   const root = `/api/bots/${encodeURIComponent(botId)}/memory`
-  async function request(id, method, payload, signal) {
+  async function request(id: string | null, method: string, payload: unknown, signal?: AbortSignal): Promise<PanelNote | PanelNote[]> {
     const write = method !== 'GET'
-    let response
+    let response: Response
     try {
       response = await fetcher(id == null ? root : `${root}/${encodeURIComponent(id)}`, {
         method, signal, headers: { Accept: 'application/json', ...(write ? { 'Content-Type': 'application/json' } : {}) },
         ...(write ? { body: JSON.stringify(payload) } : {}),
       })
     } catch (error) {
-      if (signal?.aborted || error.name === 'AbortError') throw error
+      if (signal?.aborted || (error as Error).name === 'AbortError') throw error
       throw new Error(write ? 'Save not confirmed. Your draft is still here. Check your connection before trying again.' : 'Could not load memory. Check your connection and try again.')
     }
-    const data = await response.json().catch(() => null)
+    const data = await response.json().catch(() => null) as { error?: unknown; notes?: unknown; note?: unknown } | null
     if (!response.ok) {
-      const error = new Error(typeof data?.error === 'string' ? data.error : `Memory request failed (${response.status}).`)
+      const error: Error & { status?: number } = new Error(typeof data?.error === 'string' ? data.error : `Memory request failed (${response.status}).`)
       error.status = response.status
       throw error
     }
@@ -63,17 +104,23 @@ export function createMemoryApi(botId, fetcher = (...args) => fetch(...args)) {
     }
   }
   return {
-    list: signal => request(null, 'GET', undefined, signal),
-    read: (id, signal) => request(id, 'GET', undefined, signal),
-    save: (base, draft, signal) => request(base?.id ?? null, base ? 'PATCH' : 'POST', {
+    list: (signal?: AbortSignal) => request(null, 'GET', undefined, signal) as Promise<PanelNote[]>,
+    read: (id: string, signal?: AbortSignal) => request(id, 'GET', undefined, signal) as Promise<FullNote>,
+    save: (base: Pick<PanelNote, 'id' | 'revision'> | null, draft: Draft, signal?: AbortSignal) => request(base?.id ?? null, base ? 'PATCH' : 'POST', {
       title: draft.title.trim(), body: draft.body, ...(base ? { expectedRevision: base.revision } : {}),
-    }, signal),
+    }, signal) as Promise<FullNote>,
   }
 }
 
-export function memoryRelations(note, notes = []) {
+export interface MemoryRelation {
+  id: string
+  title: string
+  direction: 'Links to' | 'Linked from' | 'Linked both ways'
+}
+
+export function memoryRelations(note: LinkedNote, notes: LinkedNote[] = []): MemoryRelation[] {
   const indexed = new Map(notes.map(item => [item.id, item]))
-  const related = new Map()
+  const related = new Map<string, MemoryRelation>()
   for (const link of linksOf(note.links)) {
     if (link.id !== note.id) related.set(link.id, { id: link.id, title: indexed.get(link.id)?.title || link.title || link.id, direction: 'Links to' })
   }
@@ -85,14 +132,34 @@ export function memoryRelations(note, notes = []) {
   return [...related.values()]
 }
 
-const emptyEditor = { mode: 'browse', draft: null, base: null, status: 'idle', error: '', conflict: false, latest: null, latestStatus: 'idle', latestError: '' }
+export interface EditorState {
+  mode: 'browse' | 'new' | 'edit'
+  /** Set whenever mode is not 'browse'. */
+  draft: Draft | null
+  base: EditableNote | null
+  status: 'idle' | 'saving' | 'error'
+  error: string
+  conflict: boolean
+  latest: EditableNote | null
+  latestStatus: 'idle' | 'loading' | 'ready' | 'error'
+  latestError: string
+}
 
-export function memoryEditorReducer(state, action) {
+export type EditorAction =
+  | { type: 'reset' | 'new' | 'saving' | 'latest-loading' | 'rebase' }
+  | { type: 'edit'; note: EditableNote }
+  | { type: 'change'; field: keyof Draft; value: string }
+  | { type: 'failed' | 'conflict' | 'latest-failed'; error: string }
+  | { type: 'latest-loaded'; note: EditableNote }
+
+const emptyEditor: EditorState = { mode: 'browse', draft: null, base: null, status: 'idle', error: '', conflict: false, latest: null, latestStatus: 'idle', latestError: '' }
+
+export function memoryEditorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case 'reset': return emptyEditor
     case 'new': return { ...emptyEditor, mode: 'new', draft: { title: '', body: '' } }
     case 'edit': return { ...emptyEditor, mode: 'edit', base: action.note, draft: { title: action.note.title, body: action.note.body } }
-    case 'change': return state.status === 'saving' ? state : { ...state, draft: { ...state.draft, [action.field]: action.value }, status: 'idle', error: '' }
+    case 'change': return state.status === 'saving' ? state : { ...state, draft: { ...state.draft, [action.field]: action.value } as Draft, status: 'idle', error: '' }
     case 'saving': return state.conflict || !state.draft || state.status === 'saving' ? state : { ...state, status: 'saving', error: '' }
     case 'failed': return { ...state, status: 'error', error: action.error }
     case 'conflict': return { ...state, status: 'error', error: action.error, conflict: true, latest: null, latestStatus: 'idle', latestError: '' }
@@ -105,14 +172,22 @@ export function memoryEditorReducer(state, action) {
   }
 }
 
-function UpdatedAt({ value }) {
+function UpdatedAt({ value }: { value?: string | number | null }) {
   const date = value ? new Date(value) : null
   return date && !Number.isNaN(date.getTime())
     ? <time dateTime={date.toISOString()} title={date.toLocaleString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
     : <span>Update time unavailable</span>
 }
 
-export function MemoryNote({ note, notes, onNavigate, titleRef, listReady = true }) {
+interface MemoryNoteProps {
+  note: LinkedNote & Pick<EditableNote, 'title' | 'body' | 'revision'> & { updatedAt?: string | null; sourceMessageIds?: string[] }
+  notes: LinkedNote[]
+  onNavigate: (id: string) => void
+  titleRef?: Ref<HTMLHeadingElement>
+  listReady?: boolean
+}
+
+export function MemoryNote({ note, notes, onNavigate, titleRef, listReady = true }: MemoryNoteProps) {
   const relations = memoryRelations(note, notes)
   return <article className="memory-note" aria-label="Selected memory note">
     <h3 className="memory-note-title" tabIndex={-1} ref={titleRef}>{note.title || 'Untitled note'}</h3>
@@ -135,31 +210,51 @@ export function MemoryNote({ note, notes, onNavigate, titleRef, listReady = true
 }
 
 // A keyed scope clears drafts and selections synchronously when the active bot changes.
-export default function MemoryPanel(props) {
+/** Lets a parent run its own navigation through the panel's unsaved-draft guard. */
+export type NavigationGuard = (leave: () => void) => void
+
+interface MemoryPanelProps {
+  botId?: string
+  botName?: string
+  onClose?: () => void
+  onBack?: () => void
+  navigationRef?: RefObject<NavigationGuard | null>
+  compact?: boolean
+}
+
+type PanelAction =
+  | { kind: 'panel'; leave: () => void }
+  | { kind: 'close' | 'back' | 'new' | 'browse' | 'cancel' }
+  | { kind: 'note'; id: string }
+
+type RequestSlot = 'list' | 'detail' | 'save' | 'conflict'
+
+export default function MemoryPanel(props: MemoryPanelProps) {
   return <MemoryPanelScope key={props.botId ?? 'no-bot'} {...props} />
 }
 
-function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationRef, compact = false }) {
-  const api = useMemo(() => createMemoryApi(botId), [botId])
-  const [notes, setNotes] = useState(null)
-  const [listStatus, setListStatus] = useState(botId ? 'loading' : 'idle')
+function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationRef, compact = false }: MemoryPanelProps) {
+  // Requests only run once a bot is selected.
+  const api = useMemo(() => createMemoryApi(botId!), [botId])
+  const [notes, setNotes] = useState<PanelNote[] | null>(null)
+  const [listStatus, setListStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(botId ? 'loading' : 'idle')
   const [listError, setListError] = useState('')
   const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState(null)
-  const [detail, setDetail] = useState({ status: 'idle', note: null, error: '' })
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<{ status: 'idle' | 'loading' | 'ready' | 'error'; note: FullNote | null; error: string }>({ status: 'idle', note: null, error: '' })
   const [editor, dispatch] = useReducer(memoryEditorReducer, emptyEditor)
-  const [pendingAction, setPendingAction] = useState(null)
+  const [pendingAction, setPendingAction] = useState<PanelAction | null>(null)
   const [notice, setNotice] = useState('')
-  const requests = useRef({})
-  const titleRef = useRef(null)
-  const draftTitleRef = useRef(null)
-  const keepDraftRef = useRef(null)
+  const requests = useRef<Partial<Record<RequestSlot, AbortController | null>>>({})
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const draftTitleRef = useRef<HTMLInputElement>(null)
+  const keepDraftRef = useRef<HTMLButtonElement>(null)
   const editorId = useId()
   const editing = editor.mode !== 'browse'
   const saving = editor.status === 'saving'
-  const dirty = editing && (editor.draft.title !== (editor.base?.title ?? '') || editor.draft.body !== (editor.base?.body ?? ''))
+  const dirty = editing && (editor.draft!.title !== (editor.base?.title ?? '') || editor.draft!.body !== (editor.base?.body ?? ''))
 
-  const startRequest = useCallback(slot => {
+  const startRequest = useCallback((slot: RequestSlot) => {
     requests.current[slot]?.abort()
     const controller = new AbortController()
     requests.current[slot] = controller
@@ -175,7 +270,7 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
     const controller = startRequest('list')
     return api.list(controller.signal).then(
       result => { if (!controller.signal.aborted) { setNotes(result); setListStatus('ready'); setListError('') } },
-      error => { if (!controller.signal.aborted) { setListError(error.message); setListStatus('error') } },
+      (error: unknown) => { if (!controller.signal.aborted) { setListError(errorMessage(error)); setListStatus('error') } },
     )
   }, [api, botId, startRequest])
 
@@ -187,7 +282,7 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
   useEffect(() => { if (pendingAction) keepDraftRef.current?.focus() }, [pendingAction])
   useEffect(() => {
     if (!dirty && !saving) return
-    const warn = event => { event.preventDefault(); event.returnValue = '' }
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty, saving])
@@ -198,7 +293,7 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
     loadList()
   }
 
-  async function loadNote(id) {
+  async function loadNote(id: string) {
     const controller = startRequest('detail')
     setSelectedId(id)
     setDetail({ status: 'loading', note: null, error: '' })
@@ -206,11 +301,11 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
       const note = await api.read(id, controller.signal)
       if (!controller.signal.aborted) setDetail({ status: 'ready', note, error: '' })
     } catch (error) {
-      if (!controller.signal.aborted) setDetail({ status: 'error', note: null, error: error.message })
+      if (!controller.signal.aborted) setDetail({ status: 'error', note: null, error: errorMessage(error) })
     }
   }
 
-  function applyAction(action) {
+  function applyAction(action: PanelAction) {
     requests.current.detail?.abort()
     requests.current.conflict?.abort()
     setPendingAction(null)
@@ -228,24 +323,24 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
     else { setSelectedId(null); setDetail({ status: 'idle', note: null, error: '' }) }
   }
 
-  function navigate(action) {
+  function navigate(action: PanelAction) {
     if (saving || requests.current.save) return
     if (dirty) { setPendingAction(action); return }
     applyAction(action)
   }
 
-  async function loadLatest(base) {
+  async function loadLatest(base: EditableNote) {
     const controller = startRequest('conflict')
     dispatch({ type: 'latest-loading' })
     try {
       const note = await api.read(base.id, controller.signal)
       if (!controller.signal.aborted) dispatch({ type: 'latest-loaded', note })
     } catch (error) {
-      if (!controller.signal.aborted) dispatch({ type: 'latest-failed', error: error.message })
+      if (!controller.signal.aborted) dispatch({ type: 'latest-failed', error: errorMessage(error) })
     }
   }
 
-  async function save(event) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!botId || !editor.draft?.title.trim() || !dirty || saving || editor.conflict || requests.current.save) return
     const controller = startRequest('save')
@@ -265,12 +360,13 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
       refreshList()
     } catch (error) {
       if (controller.signal.aborted) return
-      if (error.status === 409 && editor.base) {
-        dispatch({ type: 'conflict', error: error.message })
+      if ((error as { status?: number }).status === 409 && editor.base) {
+        dispatch({ type: 'conflict', error: errorMessage(error) })
         loadLatest(editor.base)
-      } else dispatch({ type: 'failed', error: error.message })
+      } else dispatch({ type: 'failed', error: errorMessage(error) })
     } finally {
-      if (requests.current.save === controller) requests.current.save = null
+      // TS keeps the empty-slot narrowing from the guard above; startRequest has filled it since.
+      if ((requests.current.save as AbortController | null | undefined) === controller) requests.current.save = null
     }
   }
 
@@ -293,7 +389,7 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
       {!botId && <p className="memory-empty">Select a bot to browse its memory.</p>}
       <div className="memory-toolbar" role="group" aria-label="Memory actions">
         <button type="button" aria-pressed={!editing} disabled={!botId || saving} onClick={() => navigate({ kind: 'browse' })}><BookOpen size={14} aria-hidden="true" />Browse</button>
-        <button type="button" aria-pressed={editor.mode === 'edit'} disabled={!botId || saving || detail.status !== 'ready' || editing} onClick={() => { setNotice(''); dispatch({ type: 'edit', note: detail.note }) }}><Pencil size={14} aria-hidden="true" />Edit</button>
+        <button type="button" aria-pressed={editor.mode === 'edit'} disabled={!botId || saving || detail.status !== 'ready' || editing} onClick={() => { setNotice(''); dispatch({ type: 'edit', note: detail.note! }) }}><Pencil size={14} aria-hidden="true" />Edit</button>
         <button type="button" aria-pressed={editor.mode === 'new'} disabled={!botId || saving || editor.mode === 'new'} onClick={() => navigate({ kind: 'new' })}><Plus size={14} aria-hidden="true" />New</button>
       </div>
       <p className="memory-status" role="status" aria-live="polite">{saving ? 'Saving… Keep this panel open until the save is confirmed.' : notice}</p>
@@ -303,19 +399,19 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
       </div>}
       {editing ? <form className="memory-editor" onSubmit={save} aria-label={editor.mode === 'new' ? 'New memory note' : 'Edit memory note'} aria-busy={saving}>
         <h3>{editor.mode === 'new' ? 'New note' : 'Edit note'}</h3>
-        <label className="memory-field" htmlFor={`${editorId}-title`}><span>Title</span><input ref={draftTitleRef} id={`${editorId}-title`} required value={editor.draft.title} disabled={saving} onChange={event => dispatch({ type: 'change', field: 'title', value: event.target.value })} placeholder="A fact worth remembering" /></label>
-        <label className="memory-field" htmlFor={`${editorId}-body`}><span>Body <small>Markdown</small></span><textarea id={`${editorId}-body`} aria-describedby={`${editorId}-help`} rows={12} value={editor.draft.body} disabled={saving} onChange={event => dispatch({ type: 'change', field: 'body', value: event.target.value })} placeholder="Keep the useful facts and context here." /></label>
+        <label className="memory-field" htmlFor={`${editorId}-title`}><span>Title</span><input ref={draftTitleRef} id={`${editorId}-title`} required value={editor.draft!.title} disabled={saving} onChange={event => dispatch({ type: 'change', field: 'title', value: event.target.value })} placeholder="A fact worth remembering" /></label>
+        <label className="memory-field" htmlFor={`${editorId}-body`}><span>Body <small>Markdown</small></span><textarea id={`${editorId}-body`} aria-describedby={`${editorId}-help`} rows={12} value={editor.draft!.body} disabled={saving} onChange={event => dispatch({ type: 'change', field: 'body', value: event.target.value })} placeholder="Keep the useful facts and context here." /></label>
         <p className="memory-muted" id={`${editorId}-help`}>Keep notes focused. Save confirms the write; typing alone does not save.</p>
-        <details className="memory-preview"><summary>Preview Markdown</summary><div>{editor.draft.body ? <Markdown text={editor.draft.body} /> : <p className="memory-muted">Nothing to preview yet.</p>}</div></details>
+        <details className="memory-preview"><summary>Preview Markdown</summary><div>{editor.draft!.body ? <Markdown text={editor.draft!.body} /> : <p className="memory-muted">Nothing to preview yet.</p>}</div></details>
         {editor.error && !editor.conflict && <div className="memory-error" role="alert"><p>{editor.error}</p>{editor.mode === 'new' && <p>Your draft is kept. If the save reached the server, retrying may create a duplicate.</p>}</div>}
         {editor.conflict && <div className="memory-warning" role="alert">
           <h4>This note changed elsewhere.</h4><p>{editor.error}</p><p>Your draft is intact. Compare the latest note below and merge any changes into your draft. Then use its revision for your next save.</p>
           {editor.latestStatus === 'loading' && <p role="status">Loading the latest saved note…</p>}
           {editor.latestError && <p>{editor.latestError}</p>}
           {editor.latest && <div className="memory-conflict-note"><h4>{editor.latest.title || 'Untitled note'}</h4><p className="memory-muted">Saved revision {editor.latest.revision} · <UpdatedAt value={editor.latest.updatedAt} /></p><Markdown text={editor.latest.body} /></div>}
-          <div className="memory-actions"><button type="button" disabled={editor.latestStatus === 'loading'} onClick={() => loadLatest(editor.base)}><RefreshCw size={13} aria-hidden="true" />Check latest</button>{editor.latest && <button type="button" disabled={editor.latestStatus === 'loading'} onClick={() => { dispatch({ type: 'rebase' }); setNotice('Latest revision selected. Your draft is unchanged and has not been saved.') }}>Use latest revision</button>}</div>
+          <div className="memory-actions"><button type="button" disabled={editor.latestStatus === 'loading'} onClick={() => loadLatest(editor.base!)}><RefreshCw size={13} aria-hidden="true" />Check latest</button>{editor.latest && <button type="button" disabled={editor.latestStatus === 'loading'} onClick={() => { dispatch({ type: 'rebase' }); setNotice('Latest revision selected. Your draft is unchanged and has not been saved.') }}>Use latest revision</button>}</div>
         </div>}
-        <div className="memory-save-row"><span className="memory-muted">{saving ? 'Saving…' : editor.conflict ? 'Resolve conflict to save' : dirty ? 'Unsaved changes' : editor.mode === 'new' ? 'Not saved yet' : 'No changes'}</span><div className="memory-actions"><button type="button" disabled={saving} onClick={() => navigate({ kind: 'cancel' })}>Cancel</button><button className="memory-primary" type="submit" disabled={!dirty || !editor.draft.title.trim() || saving || editor.conflict || Boolean(pendingAction)}><Save size={13} aria-hidden="true" />{saving ? 'Saving…' : 'Save'}</button></div></div>
+        <div className="memory-save-row"><span className="memory-muted">{saving ? 'Saving…' : editor.conflict ? 'Resolve conflict to save' : dirty ? 'Unsaved changes' : editor.mode === 'new' ? 'Not saved yet' : 'No changes'}</span><div className="memory-actions"><button type="button" disabled={saving} onClick={() => navigate({ kind: 'cancel' })}>Cancel</button><button className="memory-primary" type="submit" disabled={!dirty || !editor.draft!.title.trim() || saving || editor.conflict || Boolean(pendingAction)}><Save size={13} aria-hidden="true" />{saving ? 'Saving…' : 'Save'}</button></div></div>
       </form> : botId && <>
         <div className="memory-search"><Search size={15} aria-hidden="true" /><input type="search" aria-label="Search memory titles or IDs" placeholder="Search titles or IDs" value={query} onChange={event => setQuery(event.target.value)} /></div>
         <div className="memory-list-heading"><h3>Saved notes{notes !== null ? ` · ${notes.length}` : ''}</h3><button type="button" aria-label="Refresh memory list" disabled={listStatus === 'loading'} onClick={refreshList}><RefreshCw size={14} aria-hidden="true" /></button></div>
@@ -327,8 +423,8 @@ function MemoryPanelScope({ botId, botName = 'Bot', onClose, onBack, navigationR
               : <ul className="memory-list" aria-label="Saved memory notes">{visibleNotes.map(note => <li key={note.id}><button type="button" aria-current={note.id === selectedId ? 'true' : undefined} onClick={() => navigate({ kind: 'note', id: note.id })}><strong>{note.title || 'Untitled note'}</strong><span><UpdatedAt value={note.updatedAt} /><small><Link2 size={11} aria-hidden="true" />{note.links.length} link{note.links.length === 1 ? '' : 's'}</small></span></button></li>)}</ul>}
         </>}
         {detail.status === 'loading' && <p className="memory-loading-note" role="status">Loading note…</p>}
-        {detail.status === 'error' && <div className="memory-error" role="alert"><p>{detail.error}</p><button type="button" onClick={() => loadNote(selectedId)}>Retry note</button></div>}
-        {detail.status === 'ready' && <MemoryNote note={detail.note} notes={notes || []} listReady={listStatus === 'ready'} titleRef={titleRef} onNavigate={id => navigate({ kind: 'note', id })} />}
+        {detail.status === 'error' && <div className="memory-error" role="alert"><p>{detail.error}</p><button type="button" onClick={() => loadNote(selectedId!)}>Retry note</button></div>}
+        {detail.status === 'ready' && <MemoryNote note={detail.note!} notes={notes || []} listReady={listStatus === 'ready'} titleRef={titleRef} onNavigate={id => navigate({ kind: 'note', id })} />}
         {detail.status === 'idle' && Boolean(notes?.length) && <p className="memory-muted memory-pick-note">Choose a note to read it and follow its links.</p>}
       </>}
     </div>

@@ -14,7 +14,7 @@ test('memory panel API, conflict drafts, relations and accessible SSR', async t 
     optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom',
   })
   try {
-    const { default: MemoryPanel, MemoryNote, createMemoryApi, memoryEditorReducer: reduce, memoryRelations } = await vite.ssrLoadModule('/src/MemoryPanel.jsx')
+    const { default: MemoryPanel, MemoryNote, createMemoryApi, memoryEditorReducer: reduce, memoryRelations } = await vite.ssrLoadModule('/src/MemoryPanel.tsx')
     const saved = { id: 'note/one', title: 'Tea preference', body: '**Green tea**, no sugar.', revision: 2, updatedAt: '2026-09-20T12:30:00Z', links: ['note-two'], sourceMessageIds: ['message-one'] }
     const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -45,7 +45,7 @@ test('memory panel API, conflict drafts, relations and accessible SSR', async t 
 
     await t.test('API exposes JSON conflicts, rejects incomplete responses and never fabricates empty results', async () => {
       const conflictApi = createMemoryApi('bot', async () => reply({ error: 'Revision changed' }, 409))
-      await assert.rejects(conflictApi.save(saved, { title: 'Draft', body: 'Keep me' }), error => error.status === 409 && error.message === 'Revision changed')
+      await assert.rejects(conflictApi.save(saved, { title: 'Draft', body: 'Keep me' }), (error: Error & { status?: number }) => error.status === 409 && error.message === 'Revision changed')
       await assert.rejects(createMemoryApi('bot', async () => reply({})).list(), /invalid memory list/)
       await assert.rejects(createMemoryApi('bot', async () => reply({ notes: [saved, saved] })).list(), /duplicate note IDs/)
       await assert.rejects(createMemoryApi('bot', async () => reply({ note: { ...saved, body: undefined } })).read(saved.id), /incomplete memory note/)

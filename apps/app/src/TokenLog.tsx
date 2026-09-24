@@ -2,26 +2,38 @@ import { Activity, ArrowLeft, ChevronsRight, Clock3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { summarizeRequests, tokenCount } from '@bunji/shared/token-usage'
 import { modeDisplay } from '@bunji/shared/runtimes'
+import type { ChatRequest, UsageBreakdown } from '@bunji/shared/types'
+import type { RequestSummary } from '@bunji/shared/token-usage'
 import './TokenLog.css'
 import RunActivity from './RunActivity'
 
-function Total({ label, metric }) {
+/** A saved request as the chat view and token log show it. */
+export type LoggedRequest = ChatRequest & {
+  preview: string
+  serverId: string
+  modelLabel: string
+  // Not part of the shared ChatRequest: only live run results carry it, so it
+  // is usually absent from saved history.
+  activityLimited?: boolean
+}
+
+function Total({ label, metric }: { label: string; metric: RequestSummary['totals']['totalTokens'] }) {
   return <div><dt>{label}</dt><dd>{metric.partial && metric.value !== null ? '≥ ' : ''}{tokenCount(metric.value)}</dd></div>
 }
 
-function EstimatedTokens({ value, pending = false }) {
+function EstimatedTokens({ value, pending = false }: { value: number | null | undefined; pending?: boolean }) {
   if (!Number.isSafeInteger(value)) return <strong>{pending ? 'Pending' : 'Unavailable'}</strong>
   return <strong>~{tokenCount(value)} tokens</strong>
 }
 
-const providerCount = value => Number.isSafeInteger(value) && value >= 0 ? tokenCount(value) : 'Unavailable'
+const providerCount = (value: number | null | undefined) => Number.isSafeInteger(value) && (value as number) >= 0 ? tokenCount(value) : 'Unavailable'
 
-export function InputAttribution({ breakdown }) {
+export function InputAttribution({ breakdown }: { breakdown: UsageBreakdown | null | undefined }) {
   if (!breakdown) return <p className="token-missing">Input attribution is unavailable for this older request.</p>
   const user = breakdown.userMessage
   const context = breakdown.bunjiContext
   const harness = breakdown.providerHarnessUnknown
-  const calls = Number.isSafeInteger(breakdown.calls) && breakdown.calls > 0 ? breakdown.calls : 1
+  const calls = Number.isSafeInteger(breakdown.calls) && breakdown.calls! > 0 ? breakdown.calls! : 1
   return <section className="token-attribution" aria-label="Input attribution">
     <div className="token-attribution-heading"><h3>Input attribution</h3><span>{calls > 1 ? `${calls} provider calls · ` : ''}~ means estimated</span></div>
     <div className="token-attribution-grid">
@@ -33,7 +45,16 @@ export function InputAttribution({ breakdown }) {
   </section>
 }
 
-export default function TokenLog({ requests, botName, onClose, onBack, hasMore = false, compact = false }) {
+interface TokenLogProps {
+  requests: LoggedRequest[]
+  botName: string
+  onClose?: () => void
+  onBack?: () => void
+  hasMore?: boolean
+  compact?: boolean
+}
+
+export default function TokenLog({ requests, botName, onClose, onBack, hasMore = false, compact = false }: TokenLogProps) {
   const { totals, count, measured, pending } = summarizeRequests(requests)
   return <>
     <header className="panel-heading">{!compact && <Button variant="ghost" size="icon" aria-label="Back to bot details" onClick={onBack}><ArrowLeft /></Button>}<h2>Activity & tokens</h2><Button variant="ghost" size="icon" aria-label="Close token log" onClick={onClose}><ChevronsRight /></Button></header>

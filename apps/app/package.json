@@ -5,13 +5,14 @@
   "type": "module",
   "description": "The BunjiBox workbench UI served by Vite.",
   "exports": {
-    "./vite.config.js": "./vite.config.js"
+    "./vite.config": "./vite.config.ts"
   },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p . && tsc -p test"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

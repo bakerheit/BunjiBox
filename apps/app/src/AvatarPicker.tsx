@@ -1,13 +1,28 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
+import type { ChangeEvent, CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import AvatarGeneration from './AvatarGeneration'
 import { normalizeAvatarImage } from './avatar-generation'
 import './AvatarPicker.css'
 import { distinctAvatarShapes } from '@bunji/shared/avatars'
+import type { DistinctAvatarShape } from '@bunji/shared/avatars'
+import type { Avatar as AvatarValue } from '@bunji/shared/types'
 
-const AvatarContext = createContext(null)
-const DEFAULT_AVATAR = { shape: 'hexagon', color: '#777777', image: null }
+type AvatarChange = Partial<AvatarValue>
+
+interface AvatarContextValue {
+  values: Record<string, AvatarValue | undefined>
+  save?: (id: string, avatar: AvatarChange) => void
+}
+
+// Distinct shapes carry an aperture (cx, cy); legacy shapes draw two eyes instead.
+type AvatarShape =
+  | (DistinctAvatarShape & { eyeX?: undefined; eyeY?: undefined })
+  | { name: string; path: string; label?: undefined; cx?: undefined; cy?: undefined; eyeX?: number; eyeY?: number }
+
+const AvatarContext = createContext<AvatarContextValue | null>(null)
+const DEFAULT_AVATAR: AvatarValue = { shape: 'hexagon', color: '#777777', image: null }
 const TABS = ['Avatar', 'Generate', 'Upload']
-const SHAPES = [
+const SHAPES: AvatarShape[] = [
   ...distinctAvatarShapes,
   { name: 'diamond', path: 'M 50 4 L 96 50 L 50 96 L 4 50 Z' },
   { name: 'circle', path: 'M 50 8 C 74 8 92 26 92 50 C 92 74 74 92 50 92 C 26 92 8 74 8 50 C 8 26 26 8 50 8 Z' },
@@ -33,17 +48,24 @@ const COLORS = [
   { name: 'Gray', value: DEFAULT_AVATAR.color },
 ]
 
-function avatarValue(value) {
+function avatarValue(value?: AvatarChange | null): AvatarValue {
+  // A missing value fails both checks below, so the assertions only hold when it is set.
   return {
-    shape: SHAPES.some(shape => shape.name === value?.shape) ? value.shape : DEFAULT_AVATAR.shape,
-    color: /^#[0-9a-f]{6}$/i.test(value?.color) ? value.color : DEFAULT_AVATAR.color,
+    shape: SHAPES.some(shape => shape.name === value?.shape) ? value!.shape! : DEFAULT_AVATAR.shape,
+    color: /^#[0-9a-f]{6}$/i.test(value?.color as string) ? value!.color! : DEFAULT_AVATAR.color,
     image: typeof value?.image === 'string' && value.image ? value.image : null,
   }
 }
 
-export function BotAvatar({ value = DEFAULT_AVATAR, small = false, selected = false }) {
+interface BotAvatarProps {
+  value?: AvatarChange
+  small?: boolean
+  selected?: boolean
+}
+
+export function BotAvatar({ value = DEFAULT_AVATAR, small = false, selected = false }: BotAvatarProps) {
   const avatar = avatarValue(value)
-  const shape = SHAPES.find(item => item.name === avatar.shape)
+  const shape = SHAPES.find(item => item.name === avatar.shape)!
   const eyeY = shape.eyeY || 43
   const eyeX = shape.eyeX || 77
   return <span className={`bot-avatar bb-bot-avatar${small ? ' small' : ''}`} role="img" aria-label={avatar.image ? 'Custom bot avatar' : `${shape.label || avatar.shape} bot avatar`}>
@@ -64,40 +86,47 @@ export function BotAvatar({ value = DEFAULT_AVATAR, small = false, selected = fa
   </span>
 }
 
-export function Avatar({ tone = 'cyan', small = false }) {
+export function Avatar({ tone = 'cyan', small = false }: { tone?: string; small?: boolean }) {
   const context = useContext(AvatarContext)
   return <BotAvatar value={context?.values[tone] || DEFAULT_AVATAR} small={small} />
 }
 
-export function AvatarProvider({ children, values = {}, onChange }) {
+interface AvatarProviderProps {
+  children?: ReactNode
+  values?: Record<string, AvatarValue | undefined>
+  onChange?: (id: string, avatar: AvatarChange) => void
+}
+
+export function AvatarProvider({ children, values = {}, onChange }: AvatarProviderProps) {
   return <AvatarContext.Provider value={{ values, save: onChange }}>{children}</AvatarContext.Provider>
 }
 
-function moveChoice(event, index, count, select, columns = 1) {
-  const moves = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: columns, ArrowUp: -columns }
-  let next
+function moveChoice(event: KeyboardEvent<HTMLButtonElement>, index: number, count: number, select: (index: number) => void, columns = 1) {
+  const moves: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: columns, ArrowUp: -columns }
+  let next: number
   if (event.key === 'Home') next = 0
   else if (event.key === 'End') next = count - 1
   else if (event.key in moves) next = (index + moves[event.key] + count) % count
   else return
   event.preventDefault()
-  const group = event.currentTarget.parentElement
+  const group = event.currentTarget.parentElement!
   select(next)
-  group.children[next]?.focus()
+  const choice = group.children[next] as HTMLElement | undefined
+  choice?.focus()
 }
 
 // Settings owns the surrounding heading and name/description fields.
 // Pass inline={false} to use the compact launcher and modal instead.
-export function AvatarEditor({ tone = 'cyan', inline = true }) {
+export function AvatarEditor({ tone = 'cyan', inline = true }: { tone?: string; inline?: boolean }) {
   return <AvatarEditorControls key={tone} tone={tone} inline={inline} />
 }
 
-function AvatarEditorControls({ tone, inline }) {
-  const { values, save } = useContext(AvatarContext)
+function AvatarEditorControls({ tone, inline }: { tone: string; inline: boolean }) {
+  const { values, save } = useContext(AvatarContext)!
   const id = useId()
-  const dialog = useRef(null)
+  const dialog = useRef<HTMLDialogElement>(null)
   const uploadRequest = useRef(0)
-  const fileInput = useRef(null)
+  const fileInput = useRef<HTMLInputElement>(null)
   const [expanded, setExpanded] = useState(true)
   const [tab, setTab] = useState('Avatar')
   const [error, setError] = useState('')
@@ -106,11 +135,12 @@ function AvatarEditorControls({ tone, inline }) {
 
   useEffect(() => () => { uploadRequest.current += 1 }, [])
 
-  const update = (next) => {
+  const update = (next: AvatarChange) => {
     uploadRequest.current += 1
     setUploading(false)
     try {
-      save(tone, next)
+      // Without an onChange this throws and is reported like any other failed save.
+      save!(tone, next)
       setError('')
       return true
     } catch {
@@ -119,7 +149,7 @@ function AvatarEditorControls({ tone, inline }) {
     }
   }
 
-  const upload = async (event) => {
+  const upload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
@@ -142,15 +172,15 @@ function AvatarEditorControls({ tone, inline }) {
     }
   }
 
-  const selectTab = name => {
+  const selectTab = (name: string) => {
     uploadRequest.current += 1
     setUploading(false)
     setError('')
     setTab(name)
   }
 
-  const selectShape = index => update({ shape: SHAPES[index].name, image: null })
-  const selectColor = index => update({ color: COLORS[index].value, image: null })
+  const selectShape = (index: number) => update({ shape: SHAPES[index].name, image: null })
+  const selectColor = (index: number) => update({ color: COLORS[index].value, image: null })
   const activeShape = value.image ? -1 : SHAPES.findIndex(shape => shape.name === value.shape)
   const activeColor = value.image ? -1 : COLORS.findIndex(color => color.value.toLowerCase() === value.color.toLowerCase())
 
@@ -198,7 +228,7 @@ function AvatarEditorControls({ tone, inline }) {
             aria-label={`${color.name} color`}
             aria-checked={activeColor === index}
             tabIndex={index === Math.max(0, activeColor) ? 0 : -1}
-            style={{ '--avatar-swatch': color.value }}
+            style={{ '--avatar-swatch': color.value } as CSSProperties}
             onClick={() => selectColor(index)}
             onKeyDown={event => moveChoice(event, index, COLORS.length, selectColor)}
           ><span /></button>)}
@@ -229,9 +259,9 @@ function AvatarEditorControls({ tone, inline }) {
     <button type="button" className="bb-avatar-launcher" onClick={() => dialog.current?.showModal()} aria-haspopup="dialog" aria-label="Customize bot avatar">
       <BotAvatar value={value} /><span>Customize avatar</span><span className="bb-avatar-launcher-arrow" aria-hidden="true">↗</span>
     </button>
-    <dialog ref={dialog} className="bb-avatar-dialog" aria-labelledby={`${id}-title`} onClose={() => selectTab('Avatar')} onClick={event => { if (event.target === event.currentTarget) dialog.current.close() }}>
+    <dialog ref={dialog} className="bb-avatar-dialog" aria-labelledby={`${id}-title`} onClose={() => selectTab('Avatar')} onClick={event => { if (event.target === event.currentTarget) dialog.current!.close() }}>
       <div className="bb-avatar-dialog-content">
-        <header className="bb-avatar-dialog-header"><h2 id={`${id}-title`}>Make it yours</h2><button type="button" autoFocus aria-label="Close avatar settings" onClick={() => dialog.current.close()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button></header>
+        <header className="bb-avatar-dialog-header"><h2 id={`${id}-title`}>Make it yours</h2><button type="button" autoFocus aria-label="Close avatar settings" onClick={() => dialog.current!.close()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button></header>
         {builder}
       </div>
     </dialog>

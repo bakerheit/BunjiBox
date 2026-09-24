@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 
-export default function CodeBlock({ lines, label }) {
+interface CodeBlockProps {
+  lines: string[]
+  label?: string
+}
+
+export default function CodeBlock({ lines, label }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
   const text = lines.join('\n')
 

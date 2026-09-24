@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react'
 import { TriangleAlert } from 'lucide-react'
-import CodeBlock from './CodeBlock.jsx'
+import CodeBlock from './CodeBlock.tsx'
 
 export default function Install() {
   return (
@@ -7,7 +8,7 @@ export default function Install() {
       <div className="mx-auto max-w-6xl px-6">
         <p className="font-mono text-xs uppercase tracking-[0.18em] text-brand">Install</p>
         <h2 className="mt-4 max-w-2xl text-balance text-4xl font-semibold tracking-tight text-white">
-          Node 22.13, a signed-in CLI, and about a minute.
+          Node 22.18, a signed-in CLI, and about a minute.
         </h2>
 
         <div className="mt-12 grid gap-8 lg:grid-cols-3">
@@ -49,7 +50,14 @@ export default function Install() {
   )
 }
 
-function Step({ n, title, body, children }) {
+interface StepProps {
+  n: string
+  title: string
+  body: string
+  children: ReactNode
+}
+
+function Step({ n, title, body, children }: StepProps) {
   return (
     <div>
       <div className="flex items-center gap-3">

@@ -1,26 +1,53 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Check, Folder, X } from 'lucide-react'
+import { errorMessage } from '@bunji/shared/errors'
+import type { Bot, ComputerLevel, ComputerNetwork, ComputerScope } from '@bunji/shared/types'
 import './ComputerAccessPanel.css'
 
-const DEFAULT_COMPUTER = Object.freeze({ scope: 'none', level: 'read', network: 'off' })
+/**
+ * The panel's editable draft. Unlike the saved ComputerProfile, a folder draft
+ * may still have an empty (or missing) path while the user types.
+ */
+export interface ComputerDraft {
+  scope: ComputerScope
+  level: ComputerLevel
+  network: ComputerNetwork
+  folder?: string
+}
 
-function normalizeComputer(value) {
-  const computer = value && typeof value === 'object' ? value : {}
+/** The bot fields this panel reads. `computer` may be a saved profile or an older shape. */
+export interface ComputerPanelBot {
+  id: string
+  name?: string
+  computer?: unknown
+}
+
+const DEFAULT_COMPUTER = Object.freeze({ scope: 'none', level: 'read', network: 'off' } as const)
+
+function normalizeComputer(value: unknown): ComputerDraft {
+  // Also accepts older field names (access, mode, permission) from earlier builds.
+  const computer = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
   const rawScope = computer.scope || computer.access || computer.mode
   const scope = rawScope === 'folder' || rawScope === 'selected-folder' ? 'folder' : rawScope === 'machine' || rawScope === 'full' || rawScope === 'full-machine' || rawScope === 'mac' ? 'machine' : 'none'
   const rawLevel = computer.level || computer.permission || computer.permissions
   const level = rawLevel === 'ask' || rawLevel === 'ask-before-changes' ? 'ask' : rawLevel === 'auto' || rawLevel === 'work' || rawLevel === 'automatic' || rawLevel === 'work-automatically' ? 'auto' : 'read'
-  const normalized = { ...DEFAULT_COMPUTER, scope, level, network: computer.network === 'ask' ? 'ask' : 'off' }
+  const normalized: ComputerDraft = { ...DEFAULT_COMPUTER, scope, level, network: computer.network === 'ask' ? 'ask' : 'off' }
   if (scope === 'folder') normalized.folder = typeof computer.folder === 'string' ? computer.folder : ''
   return normalized
 }
 
-function isAbsoluteMacPath(path) {
+function isAbsoluteMacPath(path: string) {
   return path.startsWith('/')
 }
 
-async function requestJson(path, { method, body } = {}) {
-  let response
+interface SaveResult {
+  error?: string
+  bot?: Bot
+  bots?: Bot[]
+}
+
+async function requestJson(path: string, { method, body }: { method?: string; body?: unknown } = {}): Promise<SaveResult> {
+  let response: Response
   try {
     response = await fetch(path, {
       method,
@@ -33,39 +60,57 @@ async function requestJson(path, { method, body } = {}) {
     throw new Error('Cannot reach BunjiBox on this Mac. Your changes are still here.')
   }
 
-  const result = await response.json().catch(() => ({}))
+  const result = await response.json().catch(() => ({})) as SaveResult
   if (!response.ok) throw new Error(result.error || 'Could not save computer access.')
   return result
 }
 
-function RadioOption({ checked, description, id, label, name, onChange, value, warning = false }) {
+interface OptionProps {
+  checked: boolean
+  description: string
+  id: string
+  label: string
+  name: string
+  onChange: () => void
+  value: string
+}
+
+function RadioOption({ checked, description, id, label, name, onChange, value, warning = false }: OptionProps & { warning?: boolean }) {
   return <label className={'computer-access-option' + (checked ? ' is-selected' : '') + (warning ? ' is-warning' : '')} htmlFor={id}>
     <input id={id} type="radio" name={name} value={value} checked={checked} onChange={onChange} />
     <span className="computer-access-option-copy"><strong>{label}</strong><small>{description}</small></span>
   </label>
 }
 
-function PermissionOption({ checked, description, id, label, name, onChange, value }) {
+function PermissionOption({ checked, description, id, label, name, onChange, value }: OptionProps) {
   return <label className={'computer-permission-option' + (checked ? ' is-selected' : '')} htmlFor={id}>
     <input id={id} type="radio" name={name} value={value} checked={checked} onChange={onChange} />
     <span><strong>{label}</strong><small>{description}</small></span>
   </label>
 }
 
-function FullAccessDialog({ botName, error, pending, onCancel, onConfirm }) {
-  const confirmRef = useRef(null)
-  const dialogRef = useRef(null)
+interface FullAccessDialogProps {
+  botName: string
+  error: string
+  pending: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+function FullAccessDialog({ botName, error, pending, onCancel, onConfirm }: FullAccessDialogProps) {
+  const confirmRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLElement>(null)
   const titleId = useId()
   const descriptionId = useId()
   useEffect(() => {
     const previous = document.activeElement
     confirmRef.current?.focus()
-    const onKeyDown = event => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !pending) onCancel()
       if (event.key !== 'Tab') return
-      const buttons = [...dialogRef.current?.querySelectorAll('button:not([disabled])') || []]
+      const buttons = [...dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not([disabled])') || []]
       if (!buttons.length) return
-      if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault(); buttons.at(-1).focus() }
+      if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault(); buttons.at(-1)!.focus() }
       else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault(); buttons[0].focus() }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -91,11 +136,18 @@ function FullAccessDialog({ botName, error, pending, onCancel, onConfirm }) {
  * Standalone bot settings panel. The parent decides where it is shown and can
  * merge the saved bot through onSaved without needing to own its draft state.
  */
-export default function ComputerAccessPanel(props) {
+interface ComputerAccessPanelProps {
+  bot?: ComputerPanelBot | null
+  onSaved?: (bot: ComputerPanelBot, computer: ComputerDraft) => void
+  onClose?: () => void
+  onBack?: () => void
+}
+
+export default function ComputerAccessPanel(props: ComputerAccessPanelProps) {
   return <ComputerAccessPanelDraft key={props.bot?.id || 'new-bot'} {...props} />
 }
 
-function ComputerAccessPanelDraft({ bot, onSaved, onClose, onBack }) {
+function ComputerAccessPanelDraft({ bot, onSaved, onClose, onBack }: ComputerAccessPanelProps) {
   const initialComputer = normalizeComputer(bot?.computer)
   const [computer, setComputer] = useState(initialComputer)
   const [savedComputer, setSavedComputer] = useState(initialComputer)
@@ -103,22 +155,24 @@ function ComputerAccessPanelDraft({ bot, onSaved, onClose, onBack }) {
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const folderInputRef = useRef(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const id = useId()
   const isFolder = computer.scope === 'folder'
   const isFullMachine = computer.scope === 'machine'
   const isDirty = JSON.stringify(computer) !== JSON.stringify(savedComputer)
 
-  const update = changes => {
+  const update = (changes: Partial<ComputerDraft>) => {
     setComputer(current => ({ ...current, ...changes }))
     setError('')
     setNotice('')
   }
 
-  const chooseAccess = scope => {
+  const chooseAccess = (scope: ComputerScope) => {
     setComputer(current => {
-      const next = { ...current, scope, network: 'off', level: scope === 'machine' ? 'auto' : scope === 'folder' && current.scope === 'folder' ? current.level : 'read' }
-      if (scope !== 'folder') delete next.folder
+      const next: ComputerDraft = { ...current, scope, network: 'off', level: scope === 'machine' ? 'auto' : scope === 'folder' && current.scope === 'folder' ? current.level : 'read' }
+      // A new folder draft starts empty so Save shows the path error instead of throwing.
+      if (scope === 'folder') next.folder = current.folder ?? ''
+      else delete next.folder
       return next
     })
     setError('')
@@ -134,7 +188,7 @@ function ComputerAccessPanelDraft({ bot, onSaved, onClose, onBack }) {
   const save = async (confirmed = false) => {
     if (!bot?.id) { setError('This bot is not ready yet. Try again in a moment.'); return false }
     if (isFullMachine && savedComputer.scope !== 'machine' && !confirmed) { setConfirmOpen(true); return false }
-    if (isFolder && !isAbsoluteMacPath(computer.folder.trim())) {
+    if (isFolder && !isAbsoluteMacPath((computer.folder ?? '').trim())) {
       setError('Enter an absolute folder path, such as /Users/you/Documents/project.')
       folderInputRef.current?.focus()
       return false
@@ -147,13 +201,13 @@ function ComputerAccessPanelDraft({ bot, onSaved, onClose, onBack }) {
         method: isFullMachine || isFolder ? 'POST' : 'PATCH',
         body: { computer },
       })
-      const savedBot = result?.bot || result?.bots?.find(item => item.id === bot.id) || { ...bot, computer }
+      const savedBot: ComputerPanelBot = result?.bot || result?.bots?.find(item => item.id === bot.id) || { ...bot, computer }
       setSavedComputer(computer)
       setNotice(isFullMachine ? 'Full access is on. This bot can work across this Mac.' : 'Computer access saved.')
       onSaved?.(savedBot, computer)
       return true
     } catch (requestError) {
-      setError(requestError.message)
+      setError(errorMessage(requestError))
       return false
     } finally {
       setSaving(false)

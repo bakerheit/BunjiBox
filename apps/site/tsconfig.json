@@ -1,6 +1,13 @@
 {
+  // Browser code bundled by Vite. tsc only typechecks; Vite transpiles.
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "types": ["node", "vite/client"],
     "paths": { "@/*": ["./src/*"] }
-  }
+  },
+  "include": ["src", "vite.config.ts"]
 }

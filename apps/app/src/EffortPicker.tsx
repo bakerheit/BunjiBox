@@ -1,25 +1,40 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, RotateCcw, Zap } from 'lucide-react'
+import type { Effort } from '@bunji/shared/types'
 import './EffortPicker.css'
 
-const effortLabels = { xhigh: 'Extra high' }
-const labelFor = (value) => effortLabels[value] || String(value).replace(/[-_]/g, ' ').replace(/^./, (letter) => letter.toUpperCase())
+const effortLabels: Partial<Record<Effort, string>> = { xhigh: 'Extra high' }
+const labelFor = (value: Effort) => effortLabels[value] || String(value).replace(/[-_]/g, ' ').replace(/^./, (letter) => letter.toUpperCase())
+
+export interface EffortOption {
+  value: Effort
+  label: string
+}
+
+interface EffortPickerProps {
+  modelLabel?: string
+  effort: Effort
+  steps?: readonly (Effort | EffortOption)[]
+  onChange: (effort: Effort) => void
+  defaultEffort?: Effort
+}
 
 /** `steps` accepts effort strings or { value, label } objects. onChange receives the value. */
-export function EffortPicker({ modelLabel, effort, steps, onChange, defaultEffort = 'medium' }) {
-  const options = (steps || []).map((step) => typeof step === 'string' ? { value: step, label: labelFor(step) } : step)
+export function EffortPicker({ modelLabel, effort, steps, onChange, defaultEffort = 'medium' }: EffortPickerProps) {
+  const options = (steps || []).map((step): EffortOption => typeof step === 'string' ? { value: step, label: labelFor(step) } : step)
   const fallbackIndex = Math.max(0, options.findIndex((option) => option.value === defaultEffort))
   const selectedIndex = options.findIndex((option) => option.value === effort)
   const index = selectedIndex < 0 ? fallbackIndex : selectedIndex
   const current = options[index]
   const fallback = options[fallbackIndex]
   const [open, setOpen] = useState(false)
-  const [position, setPosition] = useState(null)
-  const triggerRef = useRef(null)
-  const panelRef = useRef(null)
-  const rangeRef = useRef(null)
-  const resetRef = useRef(null)
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const rangeRef = useRef<HTMLInputElement>(null)
+  const resetRef = useRef<HTMLButtonElement>(null)
   const id = useId()
   const expanded = open && options.length > 0
   const progress = options.length > 1 ? index / (options.length - 1) : 0
@@ -47,8 +62,8 @@ export function EffortPicker({ modelLabel, effort, steps, onChange, defaultEffor
 
     placePanel()
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(placePanel)
-    observer?.observe(triggerRef.current)
-    observer?.observe(panelRef.current)
+    observer?.observe(triggerRef.current!)
+    observer?.observe(panelRef.current!)
     window.addEventListener('resize', placePanel)
     window.addEventListener('scroll', placePanel, true)
     window.visualViewport?.addEventListener('resize', placePanel)
@@ -64,11 +79,11 @@ export function EffortPicker({ modelLabel, effort, steps, onChange, defaultEffor
 
   useEffect(() => {
     if (!expanded) return
-    const contains = (target) => triggerRef.current?.contains(target) || panelRef.current?.contains(target)
-    const dismissOutside = (event) => {
+    const contains = (target: EventTarget | null) => triggerRef.current?.contains(target as Node | null) || panelRef.current?.contains(target as Node | null)
+    const dismissOutside = (event: Event) => {
       if (!contains(event.target)) setOpen(false)
     }
-    const dismissEscape = (event) => {
+    const dismissEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
@@ -87,7 +102,7 @@ export function EffortPicker({ modelLabel, effort, steps, onChange, defaultEffor
     }
   }, [expanded])
 
-  const handleTab = (event) => {
+  const handleTab = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Tab') return
     const first = resetRef.current
     const last = rangeRef.current?.disabled ? first : rangeRef.current
@@ -153,7 +168,7 @@ export function EffortPicker({ modelLabel, effort, steps, onChange, defaultEffor
             </button>
           </div>
 
-          <div className="effort-picker__slider" style={{ '--effort-position': `${progress * 100}%` }}>
+          <div className="effort-picker__slider" style={{ '--effort-position': `${progress * 100}%` } as CSSProperties}>
             <input
               ref={rangeRef}
               className="effort-picker__range"
