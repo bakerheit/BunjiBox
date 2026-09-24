@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { access, link, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
+import { access, link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -361,6 +361,10 @@ test('concurrent processes keep all distinct creations', { timeout: 15000 }, asy
 test('writes atomically replace complete files while external readers observe them', { timeout: 15000 }, async t => {
   const { store, directory, file } = await fixture(t)
   const saved = await note(store), path = file('bot-a', saved.id), originalStat = await lstat(path)
+  // Holding the original open pins its inode, so the filesystem cannot hand the
+  // same number to a later temp file and make an in-place write look atomic.
+  const original = await open(path, 'r')
+  t.after(() => original.close())
   let complete = false, reads = 0
   const writing = promisify(execFile)(process.execPath, ['--input-type=module', '-e', `
     import {openMemoryStore} from ${JSON.stringify(moduleURL)};
@@ -377,6 +381,7 @@ test('writes atomically replace complete files while external readers observe th
   await writing
   assert.ok(reads > 1)
   assert.notEqual((await lstat(path)).ino, originalStat.ino)
+  assert.ok((await original.readFile('utf8')).endsWith(saved.body), 'the original file was replaced, never rewritten in place')
   assert.ok((await store.read('bot-a', 'tea')).body.startsWith('34:'))
   assert.deepEqual(await readdir(join(directory, 'bot-a')), ['tea.md'])
 })
