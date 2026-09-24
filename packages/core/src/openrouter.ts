@@ -1,4 +1,8 @@
 import { spawn } from 'node:child_process'
+import type { Activity, TokenUsage } from '@bunji/shared/types'
+import { errorMessage, fail } from '@bunji/shared/errors'
+import type { SpawnProcess } from './run-stream.ts'
+import type { ProviderHooks, ProviderOutcome, ProviderRequest } from './provider-types.ts'
 
 const API = 'https://openrouter.ai/api/v1'
 const KEYCHAIN_ACCOUNT = 'bunji-openrouter'
@@ -7,46 +11,61 @@ const keyPattern = /^sk-or-[A-Za-z0-9_-]{16,}$/
 const KEYCHAIN_TIMEOUT_MS = 8000
 let credentialMutation = false
 
-export function createSecurityRunner({ spawnProcess = spawn, timeoutMs = KEYCHAIN_TIMEOUT_MS } = {}) {
+/** Runs the macOS `security` tool with optional stdin and resolves its stdout. */
+export type SecurityRunner = (args: string[], input?: string) => Promise<string>
+
+export interface OpenRouterCredential {
+  key: string
+  source: 'keychain' | 'environment'
+}
+
+/** The subset of fetch the OpenRouter calls use; tests inject a fake. */
+export type OpenRouterFetch = (url: string, init: RequestInit) => Promise<Pick<Response, 'ok' | 'status' | 'json'>>
+
+/** A failed `security` run. `code` is the exit code (44: item not found). */
+export type KeychainError = Error & { code: number | null; detail: string; status: number }
+
+export function createSecurityRunner({ spawnProcess = spawn, timeoutMs = KEYCHAIN_TIMEOUT_MS }: { spawnProcess?: SpawnProcess; timeoutMs?: number } = {}): SecurityRunner {
   return (args, input = '') => new Promise((resolve, reject) => {
     // `security -w` uses /dev/tty when it inherits Bunji's controlling terminal,
     // ignoring the stdin pipe and waiting forever. A detached POSIX session has
     // no controlling terminal, so the password prompt correctly reads this pipe.
     const child = spawnProcess('security', args, { stdio: ['pipe', 'pipe', 'pipe'], detached: true })
-    let stdout = '', stderr = '', settled = false, timer
-    const finish = (error, value) => {
+    let stdout = '', stderr = '', settled = false
+    let timer: NodeJS.Timeout | undefined
+    const finish = (error: Error | null, value?: string) => {
       if (settled) return
       settled = true; clearTimeout(timer)
-      if (error) reject(error); else resolve(value)
+      if (error) reject(error); else resolve(value as string)
     }
-    const append = (current, chunk) => (current + chunk).slice(-65536)
-    child.stdout.on('data', chunk => { stdout = append(stdout, chunk) })
-    child.stderr.on('data', chunk => { stderr = append(stderr, chunk) })
-    child.on('error', () => finish(Object.assign(new Error('macOS Keychain could not start.'), { status: 503 })))
-    child.on('close', code => code === 0 ? finish(null, stdout) : finish(Object.assign(new Error('macOS Keychain operation failed.'), { code, detail: stderr, status: 503 })))
+    const append = (current: string, chunk: Buffer | string) => (current + chunk).slice(-65536)
+    child.stdout!.on('data', (chunk: Buffer) => { stdout = append(stdout, chunk) })
+    child.stderr!.on('data', (chunk: Buffer) => { stderr = append(stderr, chunk) })
+    child.on('error', () => finish(fail('macOS Keychain could not start.', 503)))
+    child.on('close', (code: number | null) => code === 0 ? finish(null, stdout) : finish(Object.assign(new Error('macOS Keychain operation failed.'), { code, detail: stderr, status: 503 }) satisfies KeychainError))
     timer = setTimeout(() => {
       child.kill('SIGKILL')
-      finish(Object.assign(new Error('macOS Keychain timed out. Try saving the key again.'), { code: 'BUNJI_KEYCHAIN_TIMEOUT', status: 503 }))
+      finish(fail('macOS Keychain timed out. Try saving the key again.', 503, 'BUNJI_KEYCHAIN_TIMEOUT'))
     }, timeoutMs)
-    child.stdin.on('error', () => {})
-    child.stdin.end(input)
+    child.stdin!.on('error', () => {})
+    child.stdin!.end(input)
   })
 }
 
 const security = createSecurityRunner()
 
-async function mutateCredential(action) {
-  if (credentialMutation) throw Object.assign(new Error('Another OpenRouter key update is still finishing. Try again in a moment.'), { status: 409 })
+async function mutateCredential<T>(action: () => Promise<T>): Promise<T> {
+  if (credentialMutation) throw fail('Another OpenRouter key update is still finishing. Try again in a moment.', 409)
   credentialMutation = true
   try { return await action() }
   finally { credentialMutation = false }
 }
 
-export function validOpenRouterKey(value) {
+export function validOpenRouterKey(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 512 && keyPattern.test(value)
 }
 
-export async function readOpenRouterCredential({ run = security, env = process.env } = {}) {
+export async function readOpenRouterCredential({ run = security, env = process.env }: { run?: SecurityRunner; env?: NodeJS.ProcessEnv } = {}): Promise<OpenRouterCredential | null> {
   if (process.platform === 'darwin') {
     try {
       const key = (await run(['find-generic-password', '-a', KEYCHAIN_ACCOUNT, '-s', KEYCHAIN_SERVICE, '-w'])).trim()
@@ -57,22 +76,31 @@ export async function readOpenRouterCredential({ run = security, env = process.e
   return validOpenRouterKey(key) ? { key, source: 'environment' } : null
 }
 
-export async function saveOpenRouterCredential(key, { run = security } = {}) {
+export async function saveOpenRouterCredential(key: unknown, { run = security }: { run?: SecurityRunner } = {}): Promise<void> {
   const clean = typeof key === 'string' ? key.trim() : ''
-  if (!validOpenRouterKey(clean)) throw Object.assign(new Error('Enter a valid OpenRouter API key.'), { status: 400 })
-  if (process.platform !== 'darwin') throw Object.assign(new Error('Saving OpenRouter keys currently requires macOS Keychain. You can set OPENROUTER_API_KEY instead.'), { status: 501 })
+  if (!validOpenRouterKey(clean)) throw fail('Enter a valid OpenRouter API key.', 400)
+  if (process.platform !== 'darwin') throw fail('Saving OpenRouter keys currently requires macOS Keychain. You can set OPENROUTER_API_KEY instead.', 501)
   // Passing -w last makes `security` read the value from stdin, keeping the key
   // out of the process arguments. The command asks for the value twice.
   await mutateCredential(() => run(['add-generic-password', '-U', '-a', KEYCHAIN_ACCOUNT, '-s', KEYCHAIN_SERVICE, '-l', 'BunjiBox OpenRouter API key', '-w'], `${clean}\n${clean}\n`))
 }
 
-export async function deleteOpenRouterCredential({ run = security } = {}) {
-  if (process.platform !== 'darwin') throw Object.assign(new Error('Removing OpenRouter keys currently requires macOS Keychain.'), { status: 501 })
+export async function deleteOpenRouterCredential({ run = security }: { run?: SecurityRunner } = {}): Promise<void> {
+  if (process.platform !== 'darwin') throw fail('Removing OpenRouter keys currently requires macOS Keychain.', 501)
   try { await mutateCredential(() => run(['delete-generic-password', '-a', KEYCHAIN_ACCOUNT, '-s', KEYCHAIN_SERVICE])) }
-  catch (error) { if (error.code !== 44) throw error }
+  catch (error) { if ((error as { code?: unknown } | null)?.code !== 44) throw error }
 }
 
-export async function inspectOpenRouterKey(key, { request = fetch, signal = AbortSignal.timeout(10000) } = {}) {
+/** Account details from OpenRouter's /key endpoint. Only the fields Bunji reads are listed. */
+export interface OpenRouterKeyInfo {
+  usage?: unknown
+  limit?: unknown
+  limit_reset?: unknown
+  is_free_tier?: unknown
+  [field: string]: unknown
+}
+
+export async function inspectOpenRouterKey(key: string, { request = fetch, signal = AbortSignal.timeout(10000) }: { request?: OpenRouterFetch; signal?: AbortSignal } = {}): Promise<OpenRouterKeyInfo> {
   const response = await request(`${API}/key`, {
     headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
     redirect: 'error', signal,
@@ -81,15 +109,24 @@ export async function inspectOpenRouterKey(key, { request = fetch, signal = Abor
     const message = response.status === 401 ? 'OpenRouter rejected that API key.'
       : response.status === 429 ? 'OpenRouter is rate-limiting account checks. Try again in a minute.'
         : 'OpenRouter could not verify that API key right now.'
-    throw Object.assign(new Error(message), { status: response.status === 401 ? 400 : 503 })
+    throw fail(message, response.status === 401 ? 400 : 503)
   }
-  const payload = await response.json()
-  if (!payload?.data || typeof payload.data !== 'object') throw Object.assign(new Error('OpenRouter returned an invalid account response.'), { status: 502 })
-  return payload.data
+  const payload = await response.json() as { data?: unknown } | null
+  if (!payload?.data || typeof payload.data !== 'object') throw fail('OpenRouter returned an invalid account response.', 502)
+  return payload.data as OpenRouterKeyInfo
 }
 
-const tokenCount = value => Number.isSafeInteger(value) && value >= 0 ? value : null
-function usage(value = {}) {
+const tokenCount = (value: unknown): number | null => Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : null
+
+interface OpenRouterUsage {
+  prompt_tokens?: unknown
+  completion_tokens?: unknown
+  total_tokens?: unknown
+  prompt_tokens_details?: { cached_tokens?: unknown }
+  completion_tokens_details?: { reasoning_tokens?: unknown }
+}
+
+function usage(value: OpenRouterUsage = {}): TokenUsage {
   const inputTokens = tokenCount(value.prompt_tokens)
   const outputTokens = tokenCount(value.completion_tokens)
   const cachedInputTokens = tokenCount(value.prompt_tokens_details?.cached_tokens)
@@ -98,12 +135,23 @@ function usage(value = {}) {
   return { inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens: null, reasoningOutputTokens, totalTokens, source: 'OpenRouter response usage' }
 }
 
-const contentText = content => typeof content === 'string' ? content : Array.isArray(content)
-  ? content.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n') : ''
+const contentText = (content: unknown): string => typeof content === 'string' ? content : Array.isArray(content)
+  ? (content as ({ type?: string; text?: unknown } | null)[]).filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part!.text as string).join('\n') : ''
 
-export async function runOpenRouter({ model, effort, prompt }, { signal, onActivity, messages, request = fetch, credential = readOpenRouterCredential } = {}) {
+export interface OpenRouterRunOptions extends ProviderHooks {
+  request?: OpenRouterFetch
+  credential?: () => Promise<OpenRouterCredential | null>
+}
+
+interface ChatCompletion {
+  model?: string
+  choices?: { message?: { content?: unknown } }[]
+  usage?: OpenRouterUsage
+}
+
+export async function runOpenRouter({ model, effort, prompt }: Pick<ProviderRequest, 'model' | 'effort' | 'prompt'>, { signal, onActivity, messages, request = fetch, credential = readOpenRouterCredential }: OpenRouterRunOptions = {}): Promise<ProviderOutcome & { durationMs: number }> {
   const startedAt = Date.now()
-  const activity = { id: 'openrouter-api', kind: 'notice', title: 'OpenRouter API', status: 'running', text: 'Waiting for the selected model…' }
+  const activity: Activity = { id: 'openrouter-api', kind: 'notice', title: 'OpenRouter API', status: 'running', text: 'Waiting for the selected model…' }
   onActivity?.(activity)
   let account
   try {
@@ -122,15 +170,15 @@ export async function runOpenRouter({ model, effort, prompt }, { signal, onActiv
             : `OpenRouter could not complete the request (HTTP ${response.status}).`
       throw new Error(message)
     }
-    const payload = await response.json()
+    const payload = await response.json() as ChatCompletion | null
     const text = contentText(payload?.choices?.[0]?.message?.content)
     if (!text) throw new Error('OpenRouter returned an empty response.')
-    const complete = { ...activity, status: 'complete', text: `Response received from ${payload.model || model}.` }
+    const complete: Activity = { ...activity, status: 'complete', text: `Response received from ${payload!.model || model}.` }
     onActivity?.(complete)
-    return { text, usage: usage(payload.usage), failed: false, activities: [complete], durationMs: Date.now() - startedAt }
+    return { text, usage: usage(payload!.usage), failed: false, activities: [complete], durationMs: Date.now() - startedAt }
   } catch (error) {
-    const message = signal?.aborted ? 'The request was stopped.' : error.message
-    const failed = { ...activity, status: 'failed', text: message }
+    const message = signal?.aborted ? 'The request was stopped.' : errorMessage(error)
+    const failed: Activity = { ...activity, status: 'failed', text: message }
     onActivity?.(failed)
     return { text: '', usage: null, failed: true, error: message, activities: [failed], durationMs: Date.now() - startedAt }
   }

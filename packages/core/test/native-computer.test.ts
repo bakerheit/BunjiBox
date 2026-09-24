@@ -3,12 +3,14 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { existsSync } from 'node:fs'
-import { providerCommand, runProvider } from '../src/runtime.mjs'
-import { openBotStore } from '../src/bot-store.mjs'
-import { routeAutoPrompt } from '../src/mode-router.mjs'
+import { providerCommand, runProvider } from '../src/runtime.ts'
+import { openBotStore } from '../src/bot-store.ts'
+import { routeAutoPrompt } from '../src/mode-router.ts'
+import type { ComputerProfile } from '@bunji/shared/types'
+import type { CodexSession } from '../src/codex-app-server.ts'
 
-const computer = { scope: 'machine', level: 'auto', network: 'off' }
-const codex = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', mode: 'agent', prompt: 'Use the native fixture.' }
+const computer = { scope: 'machine', level: 'auto', network: 'off' } as const
+const codex = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', mode: 'agent', prompt: 'Use the native fixture.' } as const
 const built = process.platform === 'darwin' && existsSync(new URL('../../../experiments/computer-use-native/.build/lab/Bunji Native Lab.app/Contents/MacOS/BunjiNativeLab', import.meta.url))
 
 test('native opt-in persists, defaults off and cannot grant machine access', () => {
@@ -33,7 +35,7 @@ test('native routing and explicit Chat preserve tool boundaries', () => {
   }
   const [, args] = providerCommand({ ...codex, mode: 'chat' }, { computer, nativeComputer: 'fixture' })
   assert.ok(!args.some(arg => arg.includes('bunji_native')))
-  assert.throws(() => providerCommand(codex, { computer: { scope: 'folder', level: 'auto', folder: '/tmp' }, nativeComputer: 'fixture' }), /confirmed full-machine/)
+  assert.throws(() => providerCommand(codex, { computer: { scope: 'folder', level: 'auto', folder: '/tmp' } as ComputerProfile, nativeComputer: 'fixture' }), /confirmed full-machine/)
 })
 
 test('both providers receive native MCP alongside memory', { skip: !built }, () => {
@@ -49,14 +51,14 @@ test('both providers receive native MCP alongside memory', { skip: !built }, () 
 })
 
 test('native runs bypass persistent Codex and scope Claude initialization env', { skip: !built }, async () => {
-  for (const provider of ['codex', 'claude']) {
+  for (const provider of ['codex', 'claude'] as const) {
     let spawned
     const result = await runProvider({ ...codex, provider, model: provider === 'claude' ? 'sonnet' : codex.model }, {
-      computer, nativeComputer: 'fixture', session: {},
+      computer, nativeComputer: 'fixture', session: {} as CodexSession,
       codexAppServer: { run() { throw new Error('Must not use persistent session') } },
       spawnProcess(command, args, options) {
         spawned = options
-        const child = new EventEmitter()
+        const child: any = new EventEmitter()
         child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => true
         queueMicrotask(() => child.emit('close', 0))
         return child

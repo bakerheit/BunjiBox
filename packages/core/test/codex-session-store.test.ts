@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { openCodexSessionStore, codexHistoryKey } from '../src/codex-session-store.mjs'
+import { openCodexSessionStore, codexHistoryKey } from '../src/codex-session-store.ts'
 
 test('Codex session mappings persist by bot and validate continuity hashes', () => {
   const store = openCodexSessionStore({ path: ':memory:' })
@@ -17,7 +17,7 @@ test('Codex session mappings persist by bot and validate continuity hashes', () 
 })
 
 test('continuity hashes change for edits, rewinds, instructions and computer scope', () => {
-  const turn = { id: 'one', status: 'complete', prompt: 'Hello', text: 'Hi', promptEditedAt: null, responseEditedAt: null }
+  const turn = { id: 'one', status: 'complete' as const, prompt: 'Hello', text: 'Hi', promptEditedAt: null, responseEditedAt: null }
   const base = { instructions: 'You are Chip.', computer: { scope: 'none' }, turns: [turn] }
   const key = codexHistoryKey(base)
   assert.notEqual(codexHistoryKey({ ...base, turns: [{ ...turn, prompt: 'Edited' }] }), key)

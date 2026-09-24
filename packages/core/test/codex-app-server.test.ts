@@ -5,11 +5,11 @@ import { PassThrough } from 'node:stream'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createCodexAppServer } from '../src/codex-app-server.mjs'
-import { openCodexSessionStore } from '../src/codex-session-store.mjs'
+import { createCodexAppServer } from '../src/codex-app-server.ts'
+import { openCodexSessionStore } from '../src/codex-session-store.ts'
 
 function fakeProcess({ threadId = 'thread-1', waitForInterrupt = false } = {}) {
-  const child = new EventEmitter()
+  const child: any = new EventEmitter()
   child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough()
   child.messages = []; child.killed = []
   child.kill = signal => { child.killed.push(signal); return true }
@@ -55,13 +55,13 @@ async function fixture(t) {
   return { directory, sessions }
 }
 
-const options = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', prompt: 'unused combined prompt' }
-const machine = { sandbox: 'read-only', cwd: null, machineAccess: false }
-function hooks(directory, overrides = {}) {
+const options = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', prompt: 'unused combined prompt' } as const
+const machine = { sandbox: 'read-only', cwd: null, machineAccess: false } as const
+function hooks(directory, overrides: { requestId?: string; signal?: AbortSignal; historyKey?: string; onActivity?: (activity: unknown) => void } = {}) {
   return {
     requestId: overrides.requestId || 'request-1', signal: overrides.signal,
     memory: { botId: 'chip', sourceId: overrides.requestId || 'request-1', directory: join(directory, 'memory'), allowWrites: true },
-    computer: { scope: 'none', level: 'read', folder: null, network: 'off' },
+    computer: { scope: 'none', level: 'read', folder: null, network: 'off' } as const,
     session: { botId: 'chip', historyKey: overrides.historyKey || 'a'.repeat(64), instructions: 'You are Chip.', bootstrapPrompt: 'Previous chat and hello', turnPrompt: 'hello again' },
     onActivity: overrides.onActivity,
   }

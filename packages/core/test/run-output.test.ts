@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { codexTokens, claudeTokens, parseRunOutput } from '../src/run-output.mjs'
+import { codexTokens, claudeTokens, parseRunOutput } from '../src/run-output.ts'
 import { summarizeRequests } from '@bunji/shared/token-usage'
+import type { ChatRequest } from '@bunji/shared/types'
 
 test('Codex cached input is a subset, never added to total twice', () => {
   const usage = codexTokens({ input_tokens: 100, cached_input_tokens: 90, output_tokens: 20, reasoning_output_tokens: 5 })
@@ -44,7 +45,7 @@ test('Conversation totals track known usage, pending and failed requests honestl
     { status: 'complete', usage: codexTokens({ input_tokens: 100, output_tokens: 20, cached_input_tokens: 50 }) },
     { status: 'complete', usage: claudeTokens({ input_tokens: 10, cache_read_input_tokens: 30, cache_creation_input_tokens: 20, output_tokens: 5 }) },
     { status: 'running', usage: null }, { status: 'failed', usage: null },
-  ]
+  ] as const
   const summary = summarizeRequests(requests)
   assert.equal(summary.totals.totalTokens.value, 185)
   assert.equal(summary.totals.totalTokens.partial, true)
@@ -53,6 +54,6 @@ test('Conversation totals track known usage, pending and failed requests honestl
   assert.equal(summary.pending, 1)
   assert.equal(summary.failed, 1)
   assert.equal(summary.measured, 2)
-  assert.equal(summarizeRequests([{ status: 'failed' }]).totals.totalTokens.value, null)
+  assert.equal(summarizeRequests([{ status: 'failed' } as ChatRequest]).totals.totalTokens.value, null)
   assert.equal(summarizeRequests([]).totals.totalTokens.value, 0)
 })

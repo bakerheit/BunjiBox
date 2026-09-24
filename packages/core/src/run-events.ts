@@ -1,46 +1,110 @@
 import { createHash } from 'node:crypto'
-import { codexTokens, claudeTokens } from './run-output.mjs'
+import type { Activity, ActivityStatus, TokenUsage } from '@bunji/shared/types'
+import { codexTokens, claudeTokens } from './run-output.ts'
+import type { RunFile } from './provider-types.ts'
 
 const MAX_DETAIL = 12000
 const MAX_ACTIVITIES = 150
 
+// The fields read from provider JSON events. Everything arrives untrusted from
+// a child process; each value is checked or passed through displayText.
+interface CodexItem {
+  id?: string
+  type?: string
+  status?: string
+  error?: unknown
+  exit_code?: number | null
+  text?: string
+  command?: unknown
+  aggregated_output?: unknown
+  server?: string
+  tool?: string
+  arguments?: unknown
+  result?: { content?: unknown; structuredContent?: unknown }
+  query?: unknown
+  action?: unknown
+  changes?: { path?: unknown; kind?: string }[]
+  items?: { completed?: boolean; text?: string }[]
+  message?: unknown
+}
+
+interface ClaudeBlock {
+  type?: string
+  id?: string
+  name?: string
+  input?: { file_path?: unknown; notebook_path?: unknown }
+  tool_use_id?: string
+  is_error?: boolean
+  content?: unknown
+  thinking?: string
+}
+
+interface ProviderEvent {
+  type?: string
+  usage?: unknown
+  item?: CodexItem
+  result?: unknown
+  is_error?: unknown
+  message?: { id?: string; content?: unknown }
+  parent_tool_use_id?: string
+  uuid?: string
+}
+
+export type ActivityListener = (activity: Activity) => void
+export type FileListener = (file: RunFile) => void
+
+/** The accumulated state of one provider run, as reported by its events. */
+export interface RunEventsResult {
+  text: string
+  usage: TokenUsage | null
+  failed: boolean
+  activities: Activity[]
+  activityLimited: boolean
+}
+
+export interface RunEvents {
+  consume(event: unknown): void
+  result(): RunEventsResult
+}
+
 // Only selected, displayable fields cross the bridge. Never forward init/config,
 // encrypted reasoning, signatures, images, or the raw provider event stream.
-export function displayText(value) {
+export function displayText(value: unknown): string {
   const secret = /^(authorization|cookie|set-cookie|password|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|signature|encrypted_content)$/i
-  const text = typeof value === 'string' ? value : JSON.stringify(value, (key, item) => secret.test(key) ? '[redacted]' : item, 2) || ''
+  const text = typeof value === 'string' ? value : JSON.stringify(value, (key, item: unknown) => secret.test(key) ? '[redacted]' : item, 2) || ''
   const clean = text.replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]{16,}/g, '[redacted]')
     .replace(/((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)["']?\s*[:=]\s*["']?)[^\s"',;}]+/gi, '$1[redacted]')
   return clean.length > MAX_DETAIL ? clean.slice(0, MAX_DETAIL) + '\n… [display truncated]' : clean
 }
 
-const contentText = content => typeof content === 'string' ? content : Array.isArray(content)
-  ? content.filter(block => block.type === 'text').map(block => block.text || '').join('\n') : ''
+const contentText = (content: unknown): string => typeof content === 'string' ? content : Array.isArray(content)
+  ? (content as { type?: string; text?: string }[]).filter(block => block.type === 'text').map(block => block.text || '').join('\n') : ''
 
-export function createRunEvents(provider, onActivity = () => {}, onFile = () => {}) {
-  const activities = new Map()
-  const pendingFiles = new Map()
-  let text = '', usage = null, finished = false, failed = false, limited = false
-  const publish = (id, patch) => {
+export function createRunEvents(provider: string | undefined, onActivity: ActivityListener = () => {}, onFile: FileListener = () => {}): RunEvents {
+  const activities = new Map<string, Activity>()
+  const pendingFiles = new Map<string, RunFile>()
+  let text = '', usage: TokenUsage | null = null, finished = false, failed = false, limited = false
+  const publish = (id: string, patch: Omit<Activity, 'id' | 'at'>) => {
     if (!activities.has(id) && activities.size >= MAX_ACTIVITIES) { limited = true; return }
     const previous = activities.get(id)
-    const next = { id, at: previous?.at || new Date().toISOString(), ...previous, ...patch }
-    if (previous && Object.keys(patch).every(key => previous[key] === patch[key])) return
+    const next: Activity = { id, at: previous?.at || new Date().toISOString(), ...previous, ...patch }
+    if (previous && (Object.keys(patch) as (keyof typeof patch)[]).every(key => previous[key] === patch[key])) return
     activities.set(id, next)
     onActivity(next)
   }
-  const consume = event => {
-    if (!event || typeof event !== 'object') return
+  const consume = (value: unknown) => {
+    if (!value || typeof value !== 'object') return
+    const event = value as ProviderEvent
     if (provider === 'codex') {
       if (event.type === 'turn.completed' || event.type === 'turn.failed') {
         usage = codexTokens(event.usage); finished = true; failed = event.type === 'turn.failed'
         return
       }
-      if (!['item.started', 'item.updated', 'item.completed'].includes(event.type) || !event.item) return
+      if (!['item.started', 'item.updated', 'item.completed'].includes(event.type as string) || !event.item) return
       const item = event.item
       const id = item.id || 'event-' + activities.size
-      const status = item.status === 'failed' || item.error || (Number.isInteger(item.exit_code) && item.exit_code !== 0) ? 'failed' : event.type === 'item.completed' ? 'complete' : 'running'
+      const status: ActivityStatus = item.status === 'failed' || item.error || (Number.isInteger(item.exit_code) && item.exit_code !== 0) ? 'failed' : event.type === 'item.completed' ? 'complete' : 'running'
       if (item.type === 'agent_message') { if (event.type === 'item.completed') text = item.text || ''; return }
       if (item.type === 'reasoning') {
         if (item.text) publish(id, { kind: 'reasoning', title: 'Reasoning summary', status, text: displayText(item.text) })
@@ -52,7 +116,7 @@ export function createRunEvents(provider, onActivity = () => {}, onFile = () => 
         publish(id, { kind: 'tool', title: 'Web search', status, input: displayText(item.query || item.action), output: '' })
       } else if (item.type === 'file_change') {
         if (event.type === 'item.completed' && status === 'complete') for (const change of item.changes || []) {
-          if (typeof change.path === 'string') onFile({ path: change.path, change: ['delete', 'deleted'].includes(change.kind) ? 'deleted' : ['add', 'added'].includes(change.kind) ? 'created' : 'updated' })
+          if (typeof change.path === 'string') onFile({ path: change.path, change: ['delete', 'deleted'].includes(change.kind as string) ? 'deleted' : ['add', 'added'].includes(change.kind as string) ? 'created' : 'updated' })
         }
         publish(id, { kind: 'tool', title: 'File changes', status, input: displayText(item.changes?.map(change => ({ path: change.path, kind: change.kind }))), output: '' })
       } else if (item.type === 'todo_list') {
@@ -70,9 +134,9 @@ export function createRunEvents(provider, onActivity = () => {}, onFile = () => 
     const content = event.message?.content
     if (!Array.isArray(content)) return
     const parent = event.parent_tool_use_id ? `${event.parent_tool_use_id}:` : ''
-    for (const block of content) {
+    for (const block of content as ClaudeBlock[]) {
       if (event.type === 'assistant' && block.type === 'tool_use') {
-        if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(block.name)) {
+        if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(block.name as string)) {
           const path = block.input?.file_path || block.input?.notebook_path
           if (typeof path === 'string') pendingFiles.set(parent + block.id, { path, change: block.name === 'Write' ? 'created' : 'updated' })
         }
@@ -83,11 +147,11 @@ export function createRunEvents(provider, onActivity = () => {}, onFile = () => 
         pendingFiles.delete(parent + block.tool_use_id)
         publish(parent + block.tool_use_id, { kind: 'tool', title: activities.get(parent + block.tool_use_id)?.title || 'Tool', status: block.is_error ? 'failed' : 'complete', output: displayText(contentText(block.content)) })
       } else if (event.type === 'assistant' && block.type === 'thinking' && block.thinking) {
-        const id = parent + (event.message.id || event.uuid || '') + ':thinking:' + createHash('sha256').update(block.thinking).digest('hex').slice(0, 12)
+        const id = parent + (event.message!.id || event.uuid || '') + ':thinking:' + createHash('sha256').update(block.thinking).digest('hex').slice(0, 12)
         publish(id, { kind: 'reasoning', title: 'Thinking · provider summary', status: 'complete', text: displayText(block.thinking) })
       }
     }
   }
-  const result = () => ({ text, usage, failed: failed || !finished, activities: [...activities.values()].map(item => item.status === 'running' ? { ...item, status: 'unknown' } : item), activityLimited: limited })
+  const result = (): RunEventsResult => ({ text, usage, failed: failed || !finished, activities: [...activities.values()].map(item => item.status === 'running' ? { ...item, status: 'unknown' } : item), activityLimited: limited })
   return { consume, result }
 }

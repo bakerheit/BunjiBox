@@ -1,14 +1,15 @@
 import { Buffer } from 'node:buffer'
+import type { TextMetrics, TokenUsage, UsageBreakdown } from '@bunji/shared/types'
 
 const ESTIMATOR = 'utf8-bytes-divided-by-4'
-const tokenCount = value => Number.isSafeInteger(value) && value >= 0 ? value : null
+const tokenCount = (value: unknown): number | null => Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : null
 
-function words(value) {
+function words(value: string): number {
   const clean = value.trim()
   return clean ? clean.split(/\s+/u).length : 0
 }
 
-export function measureText(value) {
+export function measureText(value: unknown): TextMetrics {
   const text = typeof value === 'string' ? value : ''
   const utf8Bytes = Buffer.byteLength(text, 'utf8')
   return {
@@ -19,13 +20,26 @@ export function measureText(value) {
   }
 }
 
-function roleContext(messages) {
+/** A role message as sent to a provider. Only its content is measured. */
+type RoleMessage = { role?: string; content?: unknown }
+
+function roleContext(messages: readonly RoleMessage[] | undefined): string | null {
   if (!Array.isArray(messages) || !messages.length) return null
   const contents = messages.map(message => typeof message?.content === 'string' ? message.content : '')
   return contents.slice(0, -1).join('\n')
 }
 
-export function createUsageBreakdown({ provider, userMessage, prompt, messages, historyTurns = 0 }) {
+export interface UsageBreakdownInput {
+  provider: string
+  userMessage: string
+  /** The combined prompt sent to single-prompt providers. */
+  prompt: string
+  /** Role messages sent to role-based providers (OpenRouter, Ollama). */
+  messages?: readonly RoleMessage[]
+  historyTurns?: number
+}
+
+export function createUsageBreakdown({ provider, userMessage, prompt, messages, historyTurns = 0 }: UsageBreakdownInput): UsageBreakdown {
   const current = typeof userMessage === 'string' ? userMessage : ''
   const combined = typeof prompt === 'string' ? prompt : ''
   const roleBased = ['openrouter', 'ollama'].includes(provider) ? roleContext(messages) : null
@@ -42,14 +56,14 @@ export function createUsageBreakdown({ provider, userMessage, prompt, messages, 
   }
 }
 
-const sumMeasurement = (first = {}, second = {}) => ({
+const sumMeasurement = (first: Partial<TextMetrics> = {}, second: Partial<TextMetrics> = {}): TextMetrics => ({
   characters: (first.characters || 0) + (second.characters || 0),
   utf8Bytes: (first.utf8Bytes || 0) + (second.utf8Bytes || 0),
   words: (first.words || 0) + (second.words || 0),
   estimatedTokens: (first.estimatedTokens || 0) + (second.estimatedTokens || 0),
 })
 
-export function combineUsageBreakdowns(first, second) {
+export function combineUsageBreakdowns(first: UsageBreakdown | null | undefined, second: UsageBreakdown | null | undefined): UsageBreakdown | null {
   if (!first) return second || null
   if (!second) return first
   return {
@@ -66,7 +80,7 @@ export function combineUsageBreakdowns(first, second) {
   }
 }
 
-export function attributeProviderUsage(breakdown, usage) {
+export function attributeProviderUsage(breakdown: UsageBreakdown | null | undefined, usage: TokenUsage | null | undefined): UsageBreakdown | null {
   if (!breakdown) return null
   const inputTokens = tokenCount(usage?.inputTokens)
   const localEstimate = tokenCount(breakdown.userMessage?.estimatedTokens) !== null

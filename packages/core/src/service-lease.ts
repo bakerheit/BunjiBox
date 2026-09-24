@@ -1,17 +1,28 @@
 import { DatabaseSync } from 'node:sqlite'
 import { chmodSync, closeSync, constants, lstatSync, mkdirSync, openSync, realpathSync } from 'node:fs'
+import type { Stats } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { workspaceDirectory } from './bot-store.mjs'
+import { errorCode, fail } from '@bunji/shared/errors'
+import { workspaceDirectory } from './bot-store.ts'
 
 const FILE = '.service-lease.sqlite'
-const fail = (message, status, code) => Object.assign(new Error(message), { status, code })
-const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino
+const sameFile = (a: Stats, b: Stats) => a.dev === b.dev && a.ino === b.ino
 
-function stat(path) {
-  try { return lstatSync(path) } catch (error) { if (error.code === 'ENOENT') return null; throw error }
+/** The running service's exclusive hold on a workspace. */
+export interface ServiceLease {
+  /** The physical (symlink-resolved) workspace directory. */
+  readonly directory: string
+  /** The lease file. */
+  readonly path: string
+  /** Idempotent. */
+  release(): void
 }
 
-function regularFile(path) {
+function stat(path: string): Stats | null {
+  try { return lstatSync(path) } catch (error) { if (errorCode(error) === 'ENOENT') return null; throw error }
+}
+
+function regularFile(path: string): Stats | null {
   const info = stat(path)
   if (info && (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1)) {
     throw fail('The service lease and its SQLite sidecars must be regular files without symbolic or hard links.', 400, 'BUNJI_UNSAFE_SERVICE_LEASE')
@@ -34,7 +45,7 @@ function regularFile(path) {
  * expiry timers or stale-lock stealing. Never unlink/replace the lease file while
  * a service could be alive: its inode, not the filename, is the lock identity.
  */
-export function acquireServiceLease({ directory = workspaceDirectory() } = {}) {
+export function acquireServiceLease({ directory = workspaceDirectory() }: { directory?: string } = {}): ServiceLease {
   if (typeof directory !== 'string' || !directory.trim() || directory.includes('\0') || directory.length > 4096) {
     throw fail('Invalid service workspace directory.', 400, 'BUNJI_INVALID_WORKSPACE')
   }
@@ -47,11 +58,11 @@ export function acquireServiceLease({ directory = workspaceDirectory() } = {}) {
   // Reserve a new file privately. Never open-and-close an EXISTING lock file
   // outside SQLite: closing an unrelated fd can release POSIX process locks.
   try { closeSync(openSync(path, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600)) }
-  catch (error) { if (error.code !== 'EEXIST') throw error }
+  catch (error) { if (errorCode(error) !== 'EEXIST') throw error }
   const original = regularFile(path)
   if (!original) throw fail('Service lease file changed during acquisition; retry.', 409, 'BUNJI_SERVICE_LEASE_CHANGED')
 
-  let db
+  let db: DatabaseSync | undefined
   try {
     db = new DatabaseSync(path)
     // An exclusive transaction on this separate coordination file lasts for the
@@ -65,7 +76,9 @@ export function acquireServiceLease({ directory = workspaceDirectory() } = {}) {
     chmodSync(path, 0o600)
   } catch (error) {
     db?.close()
-    if (typeof error.errcode === 'number' && [5, 6].includes(error.errcode & 0xff)) {
+    // SQLITE_BUSY (5) or SQLITE_LOCKED (6), in the primary result code.
+    const errcode = (error as { errcode?: unknown } | null)?.errcode
+    if (typeof errcode === 'number' && [5, 6].includes(errcode & 0xff)) {
       throw fail('This workspace already has a running Bunji service. Use its API port or stop it before starting another.', 409, 'BUNJI_WORKSPACE_IN_USE')
     }
     throw error
@@ -77,7 +90,7 @@ export function acquireServiceLease({ directory = workspaceDirectory() } = {}) {
     path,
     release() {
       if (released) return
-      db.close() // Rolls back the lock-only transaction and releases the OS lock.
+      db!.close() // Rolls back the lock-only transaction and releases the OS lock.
       released = true
     },
   })

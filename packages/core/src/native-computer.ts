@@ -1,10 +1,18 @@
 import { accessSync, constants } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import type { ComputerProfile } from '@bunji/shared/types'
 
-export const nativeTools = ['native_status', 'native_focus', 'native_observe', 'native_act', 'native_stop']
+export const nativeTools: readonly string[] = ['native_status', 'native_focus', 'native_observe', 'native_act', 'native_stop']
+
+/** How a provider launches an MCP server over stdio. */
+export interface McpServerLaunch {
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
 
 // This is trusted saved-bot configuration. Never accept helper paths from chat.
-export function nativeBridge(nativeComputer, computer) {
+export function nativeBridge(nativeComputer: string | null | undefined, computer: ComputerProfile | null | undefined): McpServerLaunch | null {
   if (!nativeComputer || nativeComputer === 'off') return null
   if (!['fixture', 'com.apple.Notes'].includes(nativeComputer)) throw new Error('Unsupported native target.')
   if (computer?.scope !== 'machine' || computer.level !== 'auto') throw new Error('Native control requires confirmed full-machine access. Folder access cannot enable it.')

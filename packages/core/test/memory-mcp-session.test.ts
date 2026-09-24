@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { createMemoryServer } from '../src/memory-mcp.mjs'
-import { openMemoryStore } from '../src/memory-store.mjs'
+import { createMemoryServer } from '../src/memory-mcp.ts'
+import { openMemoryStore } from '../src/memory-store.ts'
 
 test('persistent MCP tools read the current request scope for memory provenance', async t => {
   const directory = await mkdtemp(join(await realpath(tmpdir()), 'bunji-mcp-session-'))

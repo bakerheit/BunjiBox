@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AUTO_AGENT_CLOSE, AUTO_AGENT_OPEN, parseAgentHandoff, routeAutoPrompt } from '../src/mode-router.mjs'
+import { AUTO_AGENT_CLOSE, AUTO_AGENT_OPEN, parseAgentHandoff, routeAutoPrompt } from '../src/mode-router.ts'
 
 test('Auto routes clear tool requests directly to Agent', () => {
   assert.equal(routeAutoPrompt('codex', 'Create a spreadsheet file in my workspace').mode, 'agent')

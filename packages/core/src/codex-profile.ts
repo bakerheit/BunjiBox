@@ -3,7 +3,7 @@
 // and can add every installed plugin, skill, hook, connector, and MCP server to
 // a request. `--ignore-user-config` keeps CODEX_HOME authentication while
 // skipping config.toml; explicit feature disables keep Agent mode focused.
-export const BUNJI_CODEX_DISABLED_FEATURES = Object.freeze([
+export const BUNJI_CODEX_DISABLED_FEATURES: readonly string[] = Object.freeze([
   'plugins',
   'apps',
   'memories',
@@ -17,7 +17,7 @@ export const BUNJI_CODEX_DISABLED_FEATURES = Object.freeze([
   'skill_search',
 ])
 
-export function bunjiCodexProfileArgs() {
+export function bunjiCodexProfileArgs(): string[] {
   return [
     '--ignore-user-config',
     ...BUNJI_CODEX_DISABLED_FEATURES.flatMap(feature => ['--disable', feature]),

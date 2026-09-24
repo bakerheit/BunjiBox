@@ -3,14 +3,15 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { homedir } from 'node:os'
-import { computerExecution, providerCommand, runProvider } from '../src/runtime.mjs'
+import { computerExecution, providerCommand, runProvider } from '../src/runtime.ts'
+import type { ChatMessage } from '@bunji/shared/types'
 
-const codex = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', prompt: 'List the files.' }
+const codex = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', prompt: 'List the files.' } as const
 
 test('folder policies map to an explicit Codex sandbox and working directory', () => {
   const read = computerExecution({ scope: 'folder', level: 'read', folder: '/private/tmp/bunji-safe', network: 'off' })
   assert.deepEqual(read, { sandbox: 'read-only', cwd: '/private/tmp/bunji-safe', machineAccess: true })
-  const policy = { scope: 'folder', level: 'auto', folder: '/private/tmp/bunji-safe', network: 'off' }
+  const policy = { scope: 'folder', level: 'auto', folder: '/private/tmp/bunji-safe', network: 'off' } as const
   const write = computerExecution(policy)
   assert.deepEqual(write, { sandbox: 'workspace-write', cwd: '/private/tmp/bunji-safe', machineAccess: true })
   const [, args] = providerCommand(codex, { computer: policy })
@@ -35,7 +36,7 @@ test('ask stays blocked while confirmed full-Mac selects unrestricted provider m
 })
 
 test('the trusted folder is also the child process working directory', async () => {
-  const child = new EventEmitter()
+  const child: any = new EventEmitter()
   child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => true
   let launch
   const result = runProvider(codex, {
@@ -51,7 +52,7 @@ test('the trusted folder is also the child process working directory', async () 
 })
 
 test('Chat mode removes Bunji and machine tools while Agent mode keeps the existing harness', () => {
-  const messages = [{ role: 'system', content: 'You are Chip2.' }, { role: 'user', content: 'Hello' }]
+  const messages: ChatMessage[] = [{ role: 'system', content: 'You are Chip2.' }, { role: 'user', content: 'Hello' }]
   const [, codexChat] = providerCommand({ ...codex, mode: 'chat' }, { messages, computer: { scope: 'machine', level: 'auto', network: 'off' }, memory: { directory: '/tmp/nope', botId: 'chip2', sourceId: 'run', allowWrites: true } })
   assert.ok(codexChat.includes('--ignore-user-config'))
   assert.ok(codexChat.includes('--ignore-rules'))

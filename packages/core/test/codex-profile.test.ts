@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { BUNJI_CODEX_DISABLED_FEATURES, bunjiCodexProfileArgs } from '../src/codex-profile.mjs'
+import { BUNJI_CODEX_DISABLED_FEATURES, bunjiCodexProfileArgs } from '../src/codex-profile.ts'
 
 test('Bunji Codex profile isolates host configuration using stable CLI controls', () => {
   const args = bunjiCodexProfileArgs()

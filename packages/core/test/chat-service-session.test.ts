@@ -4,10 +4,11 @@ import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
-import { openBotStore } from '../src/bot-store.mjs'
-import { openChatStore } from '../src/chat-store.mjs'
-import { openCodexSessionStore } from '../src/codex-session-store.mjs'
-import { createChatService } from '../src/chat-service.mjs'
+import { openBotStore } from '../src/bot-store.ts'
+import { openChatStore } from '../src/chat-store.ts'
+import { openCodexSessionStore } from '../src/codex-session-store.ts'
+import { createChatService } from '../src/chat-service.ts'
+import type { ProviderResult } from '@bunji/shared/types'
 
 async function finished(chats, id) {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -24,7 +25,7 @@ test('chat service commits durable Codex continuity and invalidates it after edi
   const bots = openBotStore({ path }), chats = openChatStore({ path }), sessions = openCodexSessionStore({ path })
   const observed = []
   const service = createChatService({ bots, chats, sessions, memoryDirectory: join(directory, 'memory'),
-    run: async (options, hooks) => { observed.push({ options, hooks }); return { ok: true, text: 'Hello from Chip.', session: { threadId: 'thread-chip' } } } })
+    run: async (options, hooks) => { observed.push({ options, hooks }); return { ok: true, text: 'Hello from Chip.', session: { threadId: 'thread-chip' } } as ProviderResult } })
   t.after(async () => { await service.close(); sessions.close(); chats.close(); bots.close(); await rm(directory, { recursive: true, force: true }) })
 
   const settings = { provider: 'codex', model: 'gpt-5.6-luna', effort: 'low', mode: 'agent' }

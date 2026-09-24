@@ -4,12 +4,12 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { access } from 'node:fs/promises'
 import { setImmediate as tick } from 'node:timers/promises'
-import { avatarImageData, createAvatarGenerations, generateAvatar } from '../src/avatar-generation.mjs'
+import { avatarImageData, createAvatarGenerations, generateAvatar } from '../src/avatar-generation.ts'
 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='
 const image = `data:image/png;base64,${png}`
 const id = n => `avatar-test-${String(n).padStart(8, '0')}`
-const body = (n, prompt = 'A teal robot') => ({ id: id(n), prompt })
+const body = (n, prompt: unknown = 'A teal robot') => ({ id: id(n), prompt })
 
 function jobs(t, options = {}) {
   const calls = []
@@ -135,13 +135,15 @@ test('image output accepts supported signatures and rejects paths, URLs, invalid
   }
 })
 
-function rpc({ account = 'chatgpt', onTurn, initializeError, silent = false, ignoreTerm = false } = {}) {
-  const child = new EventEmitter()
+function rpc({ account = 'chatgpt', onTurn, initializeError, silent = false, ignoreTerm = false }: {
+  account?: string; onTurn?: (mock: { send: (message: unknown) => void; child: any }) => void; initializeError?: string; silent?: boolean; ignoreTerm?: boolean
+} = {}) {
+  const child: any = new EventEmitter()
   child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough()
   child.exitCode = null
   const messages = [], kills = []
   let spawnOptions, spawnArgs
-  const ready = Promise.withResolvers()
+  const ready = Promise.withResolvers<void>()
   const send = message => child.stdout.write(JSON.stringify(message) + '\n')
   child.kill = signal => {
     kills.push(signal)

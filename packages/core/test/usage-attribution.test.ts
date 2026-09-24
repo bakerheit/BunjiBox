@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { attributeProviderUsage, combineUsageBreakdowns, createUsageBreakdown, measureText } from '../src/usage-attribution.mjs'
+import { attributeProviderUsage, combineUsageBreakdowns, createUsageBreakdown, measureText } from '../src/usage-attribution.ts'
 
 test('Codex attribution separates the typed message from Bunji-composed context', () => {
   const userMessage = 'Hi, you are Chip2, you are an assistant for Bakerheit Labs'

@@ -5,9 +5,9 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as pause } from 'node:timers/promises'
-import { openBotStore } from '../../packages/core/src/bot-store.mjs'
-import { openChatStore } from '../../packages/core/src/chat-store.mjs'
-import { createChatService } from '../../packages/core/src/chat-service.mjs'
+import { openBotStore } from '../../packages/core/src/bot-store.ts'
+import { openChatStore } from '../../packages/core/src/chat-store.ts'
+import { createChatService } from '../../packages/core/src/chat-service.ts'
 
 if (!process.argv.includes('--live')) throw new Error('Pass --live to use the signed-in subscription for a fixture-only test.')
 const provider = process.argv.includes('--claude') ? 'claude' : 'codex'

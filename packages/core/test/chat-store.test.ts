@@ -6,12 +6,13 @@ import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { DatabaseSync } from 'node:sqlite'
-import { openChatStore } from '../src/chat-store.mjs'
-import { openBotStore, workspacePath } from '../src/bot-store.mjs'
-import { createRunEvents, displayText } from '../src/run-events.mjs'
+import { openChatStore } from '../src/chat-store.ts'
+import type { ChatStore } from '../src/chat-store.ts'
+import { openBotStore, workspacePath } from '../src/bot-store.ts'
+import { createRunEvents, displayText } from '../src/run-events.ts'
 
 const exec = promisify(execFile)
-const moduleUrl = new URL('../src/chat-store.mjs', import.meta.url).href
+const moduleUrl = new URL('../src/chat-store.ts', import.meta.url).href
 const input = (id = 'request-1', botId = 'bunjibox', changes = {}) => ({
   id, botId, prompt: 'Hello 🍋\nKeep the full message.', provider: 'codex', model: 'gpt-6-astra', effort: 'high', ...changes,
 })
@@ -19,7 +20,7 @@ const usage = { inputTokens: 10, outputTokens: 5, cachedInputTokens: 3, cacheWri
 const isStatus = status => error => error.status === status
 
 function fixture(t) {
-  const dir = mkdtempSync(join(tmpdir(), 'bunji-chat-test-')), path = join(dir, 'workspace.sqlite'), stores = new Set()
+  const dir = mkdtempSync(join(tmpdir(), 'bunji-chat-test-')), path = join(dir, 'workspace.sqlite'), stores = new Set<ChatStore>()
   const open = () => { const store = openChatStore({ path }); stores.add(store); return store }
   const close = store => { store.close(); stores.delete(store) }
   t.after(() => {
@@ -242,7 +243,7 @@ test('activity IDs upsert in place, redact details, drop raw fields and use nume
   const originalAt = store.get('request-1').activities[0].at
   tracker.consume({ type: 'item.completed', item: { id: 'command', type: 'command_execution', command: 'pwd', aggregated_output: '/tmp', exit_code: 0 } })
   store.addActivity('request-1', { id: 'summary', kind: 'reasoning', text: 'Checked the files.', encrypted_content: 'PRIVATE', signature: 'PRIVATE', raw: { token: 'PRIVATE' } })
-  store.addActivity('request-1', { id: 'command', status: 'failed', at: originalAt + 100, input: { access_token: 'PRIVATE', authorization: 'Bearer PRIVATE', nested: { password: 'PRIVATE' } }, output: 'password=PRIVATE', exitCode: 1, images: ['PRIVATE'] })
+  store.addActivity('request-1', { id: 'command', status: 'failed', at: (originalAt as number) + 100, input: { access_token: 'PRIVATE', authorization: 'Bearer PRIVATE', nested: { password: 'PRIVATE' } }, output: 'password=PRIVATE', exitCode: 1, images: ['PRIVATE'] })
   const activities = store.get('request-1').activities
   assert.deepEqual(activities.map(item => item.id), ['command', 'summary'])
   assert.equal(activities[0].at, originalAt)
@@ -429,15 +430,15 @@ test('invalid IDs, metadata, counters, events and pagination never partly commit
     assert.equal(store.get('request-1').status, 'running')
     assert.deepEqual(store.get('request-1').activities, [])
   }
-  const cyclic = {}; cyclic.self = cyclic
+  const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic
   for (const activity of [null, {}, { id: '' }, { id: '\n' }, { id: 'bad', kind: 'image' }, { id: 'bad', status: 'made-up' }, { id: 'bad', at: 'yesterday' }, { id: 'bad', exitCode: NaN }, { id: 'bad', input: cyclic }]) {
     assert.throws(() => store.addActivity('request-1', activity), isStatus(400))
   }
-  for (const limit of [0, -1, 0.5, '20', 1001, Infinity]) {
+  for (const limit of [0, -1, 0.5, '20', 1001, Infinity] as any[]) {
     assert.throws(() => store.history('bunjibox', { limit }), isStatus(400))
     assert.throws(() => store.recentCompleted('bunjibox', { limit }), isStatus(400))
   }
-  for (const before of [0, -1, 1.1, 'nope', '1.5', '99999999999999999999', {}, Infinity]) assert.throws(() => store.history('bunjibox', { before }), isStatus(400))
+  for (const before of [0, -1, 1.1, 'nope', '1.5', '99999999999999999999', {}, Infinity] as any[]) assert.throws(() => store.history('bunjibox', { before }), isStatus(400))
   assert.throws(() => store.get('../bad'), isStatus(400))
   assert.throws(() => store.history(''), isStatus(400))
   assert.throws(() => store.completedCount('../bad'), isStatus(400))

@@ -8,9 +8,9 @@ import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import { promisify } from 'node:util'
-import { openMemoryStore } from '../src/memory-store.mjs'
+import { openMemoryStore } from '../src/memory-store.ts'
 
-const moduleURL = new URL('../src/memory-store.mjs', import.meta.url).href
+const moduleURL = new URL('../src/memory-store.ts', import.meta.url).href
 const revision = raw => 'sha256:' + createHash('sha256').update(raw.replace(/^revision:[^\r\n]*/m, 'revision: ""')).digest('hex')
 const status = code => error => error.status === code
 
@@ -61,7 +61,7 @@ test('notes round trip as editable Markdown with content revisions, provenance a
   assert.equal((await stat(join(directory, 'bot-a'))).mode & 0o777, 0o700)
   const listed = await store.list('bot-a')
   assert.equal(listed.notes.length, 1)
-  assert.equal(listed.notes[0].body, undefined)
+  assert.equal((listed.notes[0] as { body?: string }).body, undefined)
   assert.equal(listed.notes[0].revision, saved.revision)
   assert.deepEqual(await readdir(join(directory, 'bot-a')), [`${saved.id}.md`])
 })
@@ -171,7 +171,7 @@ test('search returns ranked, bounded snippets with default and hard result caps'
   const capped = await store.search('bot-a', { query: 'RARE', limit: 1000 })
   assert.equal(capped.notes.length, 10)
   for (const hit of capped.notes) {
-    assert.equal(hit.body, undefined)
+    assert.equal((hit as { body?: string }).body, undefined)
     assert.ok(hit.snippet.length <= 480)
     assert.match(hit.snippet, /rare TEA/)
     assert.match(hit.revision, /^sha256:[a-f0-9]{64}$/)
@@ -320,13 +320,13 @@ async function writers(t, directory, saved, count = 4) {
     t.after(() => { if (child.exitCode === null) child.kill() })
     let stderr = '', outcome
     child.stderr.on('data', chunk => { stderr += chunk })
-    const ready = new Promise((resolve, reject) => {
+    const ready = new Promise<void>((resolve, reject) => {
       child.once('error', reject)
       child.once('message', message => message === 'ready' ? resolve() : reject(new Error('Worker did not become ready')))
       child.once('exit', code => { if (code) reject(new Error(stderr)) })
     })
     child.on('message', message => { if (typeof message === 'object') outcome = message })
-    const done = new Promise((resolve, reject) => {
+    const done = new Promise<any>((resolve, reject) => {
       child.once('error', reject)
       child.once('exit', code => code === 0 && outcome ? resolve(outcome) : reject(new Error(`Worker failed: ${stderr}`)))
     })

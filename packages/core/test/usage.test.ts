@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeCodexUsage, normalizeClaudeUsage, readCodexUsage, readClaudeUsage, readOpenRouterUsage, createUsageReader } from '../src/usage.mjs'
+import { normalizeCodexUsage, normalizeClaudeUsage, readCodexUsage, readClaudeUsage, readOpenRouterUsage, createUsageReader } from '../src/usage.ts'
 
 test('Codex uses the multi-limit map and labels durations, not assumed slot names', () => {
   const windows = normalizeCodexUsage({ rateLimits: { primary: { usedPercent: 99 } }, rateLimitsByLimitId: { codex: { primary: { usedPercent: 15, windowDurationMins: 10080, resetsAt: 1790430020 }, secondary: null }, other: { limitName: 'Other model', primary: { usedPercent: 0, windowDurationMins: 300 } } } })
@@ -31,7 +31,7 @@ test('Claude normalizes both classic and model-scoped limits without duplicates'
   assert.equal(normalizeClaudeUsage({ five_hour: { utilization: '23' } })[0].usedPercent, null)
 })
 
-function codexClient(account, payload, fail = false) {
+function codexClient(account, payload?, fail = false) {
   const methods = []
   let closed = false
   return { methods, get closed() { return closed }, connect: () => ({ request: async method => { methods.push(method); if (method === 'initialize') return {}; if (method === 'account/read') return { account }; if (fail) throw new Error('RAW_PRIVATE_ERROR'); return payload }, notify: method => methods.push(method), close: () => { closed = true } }) }
@@ -74,7 +74,7 @@ test('Claude signed-out skips all credential and network access', async () => {
 })
 
 test('Claude sends credentials only to the provider, disallows redirects, and strips them from response', async () => {
-  const result = await readClaudeUsage({ auth, credential, request: async (url, options) => {
+  const result = await readClaudeUsage({ auth, credential, request: async (url, options: any): Promise<any> => {
     assert.equal(url, 'https://api.anthropic.com/api/oauth/usage')
     assert.equal(options.headers.Authorization, 'Bearer TEST_SECRET')
     assert.equal(options.redirect, 'error')
@@ -87,19 +87,19 @@ test('Claude sends credentials only to the provider, disallows redirects, and st
 
 test('Claude expired credentials never make a usage request', async () => {
   let requested = false
-  const result = await readClaudeUsage({ auth, credential: async () => ({ accessToken: 'TEST_SECRET', expiresAt: 1 }), request: async () => { requested = true } })
+  const result = await readClaudeUsage({ auth, credential: async () => ({ accessToken: 'TEST_SECRET', expiresAt: 1 }), request: async (): Promise<any> => { requested = true } })
   assert.equal(result.status, 'unavailable')
   assert.equal(requested, false)
 })
 
 test('Claude auth failures, rate limits, malformed data, and network errors stay truthful', async () => {
   for (const status of [401, 403, 429, 500]) {
-    const result = await readClaudeUsage({ auth, credential, request: async () => ({ ok: false, status }) })
+    const result = await readClaudeUsage({ auth, credential, request: async (): Promise<any> => ({ ok: false, status }) })
     assert.equal(result.status, 'unavailable')
     assert.equal(result.connected, true)
     assert.equal(result.windows.length, 0)
   }
-  const malformed = await readClaudeUsage({ auth, credential, request: async () => ({ ok: true, json: async () => ({ unexpected: 0 }) }) })
+  const malformed = await readClaudeUsage({ auth, credential, request: async (): Promise<any> => ({ ok: true, json: async () => ({ unexpected: 0 }) }) })
   assert.equal(malformed.status, 'unavailable')
   const network = await readClaudeUsage({ auth, credential, request: async () => { throw new Error('PRIVATE_ERROR') } })
   assert.doesNotMatch(JSON.stringify(network), /PRIVATE_ERROR|TEST_SECRET/)
@@ -132,7 +132,7 @@ test('Usage cache coalesces callers, refreshes after TTL, and throttles forced r
   let calls = 0
   let resolve
   const first = new Promise(done => { resolve = done })
-  const reader = createUsageReader({ now: () => time, codex: async () => { calls++; if (calls === 1) await first; return { status: 'ok' } }, claude: async () => ({ status: 'signed_out' }), openrouter: async () => ({ status: 'signed_out' }) })
+  const reader = createUsageReader({ now: () => time, codex: async (): Promise<any> => { calls++; if (calls === 1) await first; return { status: 'ok' } }, claude: async (): Promise<any> => ({ status: 'signed_out' }), openrouter: async (): Promise<any> => ({ status: 'signed_out' }) })
   const a = reader()
   const b = reader({ refresh: true })
   resolve()

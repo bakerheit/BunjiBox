@@ -5,10 +5,11 @@
   "type": "module",
   "description": "Node-only agent runtime and stores: provider execution, run streams, usage, bots, chats, memory, files.",
   "exports": {
-    "./*": "./src/*.mjs"
+    "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p . && tsc -p test"
   },
   "dependencies": {
     "@bunji/shared": "*",

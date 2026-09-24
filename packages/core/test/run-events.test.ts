@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
-import { createRunEvents, displayText } from '../src/run-events.mjs'
-import { runStream } from '../src/run-stream.mjs'
+import { createRunEvents, displayText } from '../src/run-events.ts'
+import { runStream } from '../src/run-stream.ts'
 import { readRunResponse } from '@bunji/shared/run-response'
 import { markdownUrl } from '@bunji/shared/markdown-url'
 
@@ -63,7 +63,7 @@ test('Display details redact common credentials and cap oversized output', () =>
 })
 
 function fakeProcess() {
-  const child = new EventEmitter()
+  const child: any = new EventEmitter()
   child.stdout = new PassThrough(); child.stderr = new PassThrough()
   child.signals = []
   child.kill = signal => { child.signals.push(signal); return true }

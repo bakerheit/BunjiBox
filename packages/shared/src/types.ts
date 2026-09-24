@@ -144,7 +144,8 @@ export interface ProviderResult {
   activityLimited?: boolean
   requestId: string
   durationMs: number
-  session?: { threadId?: string }
+  /** Persistent Codex sessions only. `reused` means an existing thread continued. */
+  session?: { threadId?: string; reused?: boolean }
 }
 
 /** One line of the /api/run NDJSON stream. */
@@ -234,7 +235,8 @@ export interface MemoryList {
 // Agent files
 
 export type FilePreviewKind = 'image' | 'markdown' | 'text' | 'none'
-export type FileChange = 'created' | 'updated' | 'deleted'
+/** `shared`: a file the agent linked in its reply rather than one a tool changed. */
+export type FileChange = 'created' | 'updated' | 'deleted' | 'shared'
 
 export interface AgentFile {
   id: string
