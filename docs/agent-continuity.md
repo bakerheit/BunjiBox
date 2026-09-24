@@ -130,5 +130,5 @@ Provider-native sessions remain ephemeral; continuity belongs to Bunji.
 
 Tests cover restart recovery, idempotency, provider switching, cancellation,
 concurrent writers, path/scope guards, revisions, MCP write gating, reconnects,
-and UI behavior. server/provider-memory.smoke.mjs is opt-in and consumes real
+and UI behavior. apps/server/test/provider-memory.smoke.ts is opt-in and consumes real
 provider usage against disposable notes only.

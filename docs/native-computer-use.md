@@ -54,10 +54,10 @@ only in its native-enabled child environment so its small tool set initializes
 before the turn. No global CLI settings are edited.
 
 ```sh
-node --test packages/core/test/*.test.mjs packages/shared/test/*.test.mjs apps/server/src/*.test.mjs
+node --test packages/core/test/*.test.ts packages/shared/test/*.test.ts apps/server/test/*.test.ts
 BUNJI_NATIVE_EXPERIMENT=1 node --test experiments/computer-use-native-bridge/test/bridge.test.mjs
 swift run --package-path experiments/computer-use-native ComputerUseNativeSpikeChecks
-node --test apps/macos/Checks/*.test.mjs
+node --test apps/macos/Checks/*.test.ts
 swift build --package-path apps/macos
 ```
 

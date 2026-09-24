@@ -8,8 +8,8 @@ Start with one provider-neutral, local stdio MCP bridge for the existing Codex a
 
 Why this fits this repo:
 
-- `packages/core/src/memory-mcp.mjs` already starts a scoped stdio MCP server; its `scope()` callback binds writes to the active request. `packages/core/src/runtime.mjs` starts that bridge only for Agent-mode Codex/Claude runs and explicitly strips Bunji tools in Chat mode.
-- `docs/computer-access.md` and `packages/core/src/runtime.mjs` already map saved computer policy to provider execution. Keep that trusted server-side profile as the authority; never let model tool arguments pick a path, app, site, or permission level.
+- `packages/core/src/memory-mcp.ts` already starts a scoped stdio MCP server; its `scope()` callback binds writes to the active request. `packages/core/src/runtime.ts` starts that bridge only for Agent-mode Codex/Claude runs and explicitly strips Bunji tools in Chat mode.
+- `docs/computer-access.md` and `packages/core/src/computer-policy.ts` already map saved computer policy to provider execution. Keep that trusted server-side profile as the authority; never let model tool arguments pick a path, app, site, or permission level.
 - Codex CLI supports MCP servers, and Claude Code supports local stdio MCP servers. Their local authenticated harnesses are the plausible subscription path, not a Bunji-owned public subscription API. The exact account entitlement and whether each host passes image results through must be checked per installed client/account before shipping.
 
 ## Routes
