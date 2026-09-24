@@ -5,7 +5,7 @@ import { basename, dirname, join, parse, resolve, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { errorCode, errorMessage, fail } from '@bunji/shared/errors'
 import type { MemoryList, MemoryNote, MemoryNoteSummary } from '@bunji/shared/types'
-import { workspaceDirectory } from './bot-store.ts'
+import { workspaceDirectory } from './workspace.ts'
 
 const MAX_BODY = 12000, MAX_FILE_BYTES = 128 * 1024, MAX_NOTES = 5000, SNIPPET_LENGTH = 480
 const ID = /^[a-zA-Z0-9_-]{1,128}$/

@@ -2,8 +2,10 @@
 // services, and returns one request handler. main.ts owns the process
 // (service lease, port, signals); tests can build the same app in-process.
 import { join } from 'node:path'
-import { createProviderRunner, createUsageReader, providerCommand, providerStatus, runProvider } from '@bunji/core/runtime'
-import { openBotStore, workspaceDirectory } from '@bunji/core/bot-store'
+import { createUsageReader, providerCommand, providerStatus, runProvider } from '@bunji/core/runtime'
+import { createProviderRunner } from '@bunji/core/provider-runner'
+import { openBotStore } from '@bunji/core/bot-store'
+import { workspaceDirectory } from '@bunji/core/workspace'
 import { openChatStore } from '@bunji/core/chat-store'
 import { openMemoryStore } from '@bunji/core/memory-store'
 import { openFileStore } from '@bunji/core/file-store'

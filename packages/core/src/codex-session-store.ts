@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { validId } from '@bunji/shared/bots'
 import type { ChatRequest } from '@bunji/shared/types'
-import { workspacePath } from './bot-store.ts'
+import { workspacePath } from './workspace.ts'
 import { openWorkspaceDatabase } from './sqlite.ts'
 
 const HASH = /^[a-f0-9]{64}$/

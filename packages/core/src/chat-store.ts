@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { workspacePath } from './bot-store.ts'
+import { workspacePath } from './workspace.ts'
 import { validId } from '@bunji/shared/bots'
 import { fail } from '@bunji/shared/errors'
 import { normalizeMode, runtimes, supportedModes } from '@bunji/shared/runtimes'

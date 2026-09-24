@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { defaultBots, makeBot, patchBot, legacyBot, validId } from '@bunji/shared/bots'
 import { errorCode, fail } from '@bunji/shared/errors'
@@ -8,8 +7,8 @@ import type { Bot, BotsSnapshot, ComputerProfile } from '@bunji/shared/types'
 import { computerProfile, defaultComputerProfile, machineComputerProfile, storedComputerProfile } from './agent-permissions.ts'
 import { openWorkspaceDatabase, transaction } from './sqlite.ts'
 
-export const workspaceDirectory = (): string => process.env.BUNJI_DATA_DIR || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'bunji')
-export const workspacePath = (): string => join(workspaceDirectory(), 'workspace.sqlite')
+import { workspacePath } from './workspace.ts'
+export { workspaceDirectory, workspacePath } from './workspace.ts'
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const botFields = ['id', 'name', 'description', 'provider', 'model', 'effort', 'mode', 'avatar', 'computer', 'nativeComputer']
 const patchFields = botFields.filter(field => field !== 'id')

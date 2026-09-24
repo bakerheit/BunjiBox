@@ -12,10 +12,8 @@ import { readOpenRouterCredential, runOpenRouter } from './openrouter.ts'
 import { ollamaStatus, runOllama } from './ollama.ts'
 import { computerExecution } from './computer-policy.ts'
 import { bunjiCodexProfileArgs } from './codex-profile.ts'
-import { createCodexAppServer, isSafeToFallback } from './codex-app-server.ts'
+import { isSafeToFallback } from './codex-app-server.ts'
 import type { CodexAppServer, CodexSession } from './codex-app-server.ts'
-import { openCodexSessionStore } from './codex-session-store.ts'
-import type { CodexSessionStore } from './codex-session-store.ts'
 import type { FilesScope, MemoryScope, ProviderHooks, ProviderRequest } from './provider-types.ts'
 
 const exec = promisify(execFile)
@@ -183,35 +181,4 @@ export async function runProvider(options: ProviderRequest, { requestId = random
   const startedAt = Date.now()
   const result = await runStream(command, args, { ...hooks, ...(mode === 'agent' && nativeComputer && nativeComputer !== 'off' && options.provider === 'claude' ? { env: { ...process.env, ENABLE_TOOL_SEARCH: 'false', ENABLE_CLAUDEAI_MCP_SERVERS: 'false' } } : {}), provider: options.provider, cwd: mode === 'chat' ? tmpdir() : machine.cwd || undefined })
   return { ...result, ok: !result.failed, requestId, durationMs: Date.now() - startedAt }
-}
-
-export interface ProviderRunnerOptions {
-  /** Enables the persistent Codex app-server for Codex Agent runs. */
-  experimental?: boolean
-  sessions?: CodexSessionStore
-  appServer?: CodexAppServer
-}
-
-export interface ProviderRunnerHandle {
-  /** The Codex session store in use, or null when persistent sessions are off. */
-  sessions: CodexSessionStore | null
-  run: ProviderRunner
-  close(): Promise<void>
-}
-
-export function createProviderRunner({ experimental = false, sessions, appServer }: ProviderRunnerOptions = {}): ProviderRunnerHandle {
-  if (!experimental) return { sessions: null, run: runProvider, async close() {} }
-  const store = sessions || openCodexSessionStore()
-  const server = appServer || createCodexAppServer({ sessions: store })
-  let closed = false
-  return {
-    sessions: store,
-    run(options, hooks = {}) { return runProvider(options, { ...hooks, codexAppServer: server }) },
-    async close() {
-      if (closed) return
-      closed = true
-      await server.close()
-      store.close()
-    },
-  }
 }

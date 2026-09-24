@@ -3,7 +3,7 @@ import { chmodSync, closeSync, constants, lstatSync, mkdirSync, openSync, realpa
 import type { Stats } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { errorCode, fail } from '@bunji/shared/errors'
-import { workspaceDirectory } from './bot-store.ts'
+import { workspaceDirectory } from './workspace.ts'
 
 const FILE = '.service-lease.sqlite'
 const sameFile = (a: Stats, b: Stats) => a.dev === b.dev && a.ino === b.ino
