@@ -1,19 +1,26 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { Box, Text, useApp, useInput, usePaste, useWindowSize } from 'ink'
 import wrapAnsi from 'wrap-ansi'
-import { runtimes, effortSteps } from '@bunji/core/runtime'
+import { effortSteps, providers, runtimes } from '@bunji/shared/runtimes'
 import { colors, colorValues, shapes } from '@bunji/shared/bots'
-import { count, fit, markdownLines, plainLines, safeText, statusLabel, tokenLines, transcriptLines, usageLines, viewport } from './format.mjs'
+import type { CliBot } from '@bunji/shared/bots'
+import { errorCode, errorMessage } from '@bunji/shared/errors'
+import type { Effort, Provider, RuntimeInfo } from '@bunji/shared/types'
+import { count, fit, markdownLines, plainLines, safeText, statusLabel, tokenLines, transcriptLines, usageLines, viewport } from './format.ts'
+import type { BunjiSession } from './session.ts'
 
 const h = React.createElement
-const modelOptions = Object.entries(runtimes).flatMap(([provider, runtime]) => runtime.models.map(model => ({ ...model, provider, label: runtime.label + ' · ' + model.label })))
-function computerDetails(bot, width) {
+const catalog: Record<Provider, RuntimeInfo> = runtimes
+interface PickerOption { id: string; label: string; provider?: Provider }
+const modelOptions: PickerOption[] = providers.flatMap(provider => catalog[provider].models.map(model => ({ ...model, provider, label: catalog[provider].label + ' · ' + model.label })))
+function computerDetails(bot: CliBot, width: number): string[] {
   const access = bot.computer || { scope: 'none', level: 'read', folder: null, network: 'off' }
   if (access.scope === 'folder') return ['Computer folder', ...plainLines(safeText(access.folder || 'Not selected'), Math.max(1, width)), `Mode · ${access.level === 'auto' ? 'allow changes' : access.level === 'ask' ? 'old Ask mode unavailable' : 'read only'}`]
   if (access.scope === 'machine') return ['Computer · This Mac', 'Full access · commands and changes run without individual approval.']
   return ['Computer · chat and memory only']
 }
-const commands = [
+const commands: readonly (readonly [string, string])[] = [
   ['model', 'Choose Claude or Codex and a model'], ['effort', 'Adjust the reasoning slider'],
   ['bots', 'Switch bots'], ['new', 'Create a bot'], ['name', 'Rename this bot'],
   ['description', 'Edit the bot purpose'], ['color', 'Pick an avatar color'], ['shape', 'Pick an avatar shape'],
@@ -24,17 +31,28 @@ const commands = [
   ['stop', 'Stop the active request'], ['help', 'Keys and commands'], ['quit', 'Exit Bunji'],
 ]
 
-function Pane({ title, width, height, active, color = 'cyan', children }) {
+type Focus = 'input' | 'chat' | 'bots' | 'panel'
+type Panel = 'activity' | 'tokens' | 'usage' | 'details' | 'memory'
+const pickers = ['model', 'effort', 'bots', 'color', 'shape', 'new', 'name', 'description'] as const
+type Picker = typeof pickers[number] | 'commands'
+const panelCommands = ['activity', 'tokens', 'usage', 'details', 'computer'] as const
+interface Modal { type: Picker | 'preview' | 'help'; selected: number; value: string }
+const isOneOf = <T extends string>(values: readonly T[], value: string): value is T => (values as readonly string[]).includes(value)
+
+interface PaneProps { title: string; width: number; height: number; active: boolean; color?: string; children?: ReactNode }
+function Pane({ title, width, height, active, color = 'cyan', children }: PaneProps) {
   return h(Box, { width, height, flexShrink: 0, flexDirection: 'column', borderStyle: 'round', borderColor: active ? color : 'gray', paddingX: 1, overflow: 'hidden' },
     h(Text, { bold: true, color: active ? color : 'gray', wrap: 'truncate' }, title), children)
 }
 
-function Lines({ lines, height, width, offset = 0, fromBottom = false }) {
+interface LinesProps { lines: readonly string[]; height: number; width: number; offset?: number; fromBottom?: boolean }
+function Lines({ lines, height, width, offset = 0, fromBottom = false }: LinesProps) {
   const view = viewport(lines, height, offset, fromBottom)
   return h(Box, { flexDirection: 'column', height, overflow: 'hidden' }, view.lines.map((line, index) => h(Text, { key: index, wrap: 'truncate' }, fit(line || ' ', width))))
 }
 
-function Editor({ draft, cursor, width, height, focused }) {
+interface EditorProps { draft: string; cursor: number; width: number; height: number; focused: boolean }
+function Editor({ draft, cursor, width, height, focused }: EditorProps) {
   const before = draft.slice(0, cursor)
   const char = [...draft.slice(cursor)][0] || ' '
   const display = before + (focused ? '\u001b[7m' + (char === '\n' ? ' ' : char) + '\u001b[27m' + (char === '\n' ? '\n' : '') : char) + draft.slice(cursor + (cursor < draft.length ? char.length : 0))
@@ -48,24 +66,33 @@ function Editor({ draft, cursor, width, height, focused }) {
 }
 
 // Keep input Markdown literal; render a separate preview on request.
-function markdownEditorLines(value, width) { return wrapAnsi(value, Math.max(1, width), { hard: true, trim: false }).split('\n') }
+function markdownEditorLines(value: string, width: number): string[] { return wrapAnsi(value, Math.max(1, width), { hard: true, trim: false }).split('\n') }
 
-export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
+export interface BunjiAppProps {
+  session: BunjiSession
+  /** Saves bot edits for sessions without a shared bot client (the offline demo). */
+  persist?: (bots: CliBot[]) => Promise<unknown>
+  /** The working directory shown in the header and bot details. */
+  cwd?: string
+}
+
+export default function BunjiApp({ session, persist, cwd = process.cwd() }: BunjiAppProps): ReactElement {
   useSyncExternalStore(callback => { session.on('change', callback); return () => session.off('change', callback) }, () => session.revision)
   const { columns, rows } = useWindowSize()
   const { exit } = useApp()
-  const [focus, setFocus] = useState('input')
-  const [panel, setPanel] = useState('activity')
+  const [focus, setFocus] = useState<Focus>('input')
+  const [panel, setPanel] = useState<Panel>('activity')
   const [panelOpen, setPanelOpen] = useState(true)
-  const [drafts, setDrafts] = useState({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [cursor, setCursor] = useState(0)
   const [scroll, setScroll] = useState({ chat: 0, panel: 0 })
   const [selectedActivity, setSelectedActivity] = useState(0)
-  const [expanded, setExpanded] = useState(new Set())
-  const [modal, setModal] = useState(null)
+  const [expanded, setExpanded] = useState(new Set<string>())
+  // Modal updaters below run only while a modal is open.
+  const [modal, setModal] = useState<Modal | null>(null)
   const [notice, setNotice] = useState('Ready · /help for commands')
   const [tick, setTick] = useState(0)
-  const saveQueue = useRef(Promise.resolve())
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve())
   const memoryBot = useRef(session.activeId)
   const bot = session.bot, requests = session.requests
   const draft = drafts[bot.id] || ''
@@ -105,37 +132,37 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
     const bots = session.bots.map(item => ({ ...item }))
     saveQueue.current = saveQueue.current.catch(() => {}).then(() => persist(bots)).catch(() => setNotice('Could not save bot settings. They still work for this session.'))
   }
-  const update = changes => { session.update(changes); save() }
-  const setDraft = value => setDrafts(current => ({ ...current, [bot.id]: value }))
-  const insert = value => {
+  const update = (changes: Parameters<BunjiSession['update']>[0]) => { session.update(changes); save() }
+  const setDraft = (value: string) => setDrafts(current => ({ ...current, [bot.id]: value }))
+  const insert = (value: string) => {
     const clean = safeText(value.replace(/\r\n?/g, '\n'))
     const available = Math.max(0, 9000 - draft.length)
     const addition = clean.slice(0, available)
     setDraft(draft.slice(0, cursor) + addition + draft.slice(cursor)); setCursor(cursor + addition.length)
     if (clean.length > available) setNotice('Draft limit: 9,000 characters.')
   }
-  const selectBot = id => {
+  const selectBot = (id: string) => {
     session.select(id); setCursor((drafts[id] || '').length); setScroll({ chat: 0, panel: 0 }); setSelectedActivity(0); setFocus('input')
   }
-  const openPanel = type => {
+  const openPanel = (type: Panel) => {
     setPanel(type); setPanelOpen(true); setFocus('panel'); setScroll(current => ({ ...current, panel: 0 }))
     setSelectedActivity(Math.max(0, activities.length - 1))
     if (type === 'usage') session.refreshUsage().catch(() => setNotice('Usage check failed. Press R to retry.'))
   }
-  const openPicker = type => {
+  const openPicker = (type: Picker) => {
     const selected = type === 'model' ? modelOptions.findIndex(item => item.id === bot.model && item.provider === bot.provider)
       : type === 'effort' ? effortSteps(bot.provider, bot.model).indexOf(bot.effort)
         : type === 'bots' ? session.bots.findIndex(item => item.id === bot.id)
-          : type === 'color' ? colors.findIndex(color => colorValues[color] === bot.color) : type === 'shape' ? Object.values(shapes).indexOf(bot.shape) : 0
+          : type === 'color' ? colors.findIndex(color => colorValues[color] === bot.color) : type === 'shape' ? Object.values(shapes).findIndex(glyph => glyph === bot.shape) : 0
     setModal({ type, selected: Math.max(0, selected), value: type === 'name' ? bot.name : type === 'description' ? bot.description : '' })
   }
-  const execute = (command, argument = '') => {
-    if (['model', 'effort', 'bots', 'color', 'shape', 'new', 'name', 'description'].includes(command)) {
+  const execute = (command: string, argument = ''): unknown => {
+    if (isOneOf(pickers, command)) {
       if (argument && command === 'new') { session.addBot(safeText(argument)); save(); setCursor(0); setScroll({ chat: 0, panel: 0 }); return }
       if (argument && ['name', 'description'].includes(command)) { update({ [command]: safeText(argument).slice(0, command === 'name' ? 60 : 1800) }); return }
       openPicker(command); return
     }
-    if (['activity', 'tokens', 'usage', 'details', 'computer'].includes(command)) { openPanel(command === 'computer' ? 'details' : command); return }
+    if (isOneOf(panelCommands, command)) { openPanel(command === 'computer' ? 'details' : command); return }
     if (command === 'preview') { setModal({ type: 'preview', selected: 0, value: draft }); return }
     if (command === 'help') { setModal({ type: 'help', selected: 0, value: '' }); return }
     if (command === 'memory') { openPanel('memory'); return session.readMemory({ query: argument }) }
@@ -150,18 +177,18 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
     if (command === 'quit') { session.dispose(); exit(); return }
     throw new Error('Unknown command. Use /help or Ctrl+K.')
   }
-  const restoreDraft = (botId, text) => {
+  const restoreDraft = (botId: string, text: string) => {
     if (session.disposed) return
     setDrafts(current => ({ ...current, [botId]: current[botId] ? text + '\n\n' + current[botId] : text }))
     if (session.activeId === botId) setCursor(text.length)
   }
-  const invokeCommand = (command, argument = '', original = '') => {
+  const invokeCommand = (command: string, argument = '', original = '') => {
     try {
-      Promise.resolve(execute(command, argument)).catch(error => {
+      Promise.resolve(execute(command, argument)).catch((error: unknown) => {
         if (original) restoreDraft(bot.id, original)
-        if (!session.disposed && session.activeId === bot.id) setNotice(safeText(error.message))
+        if (!session.disposed && session.activeId === bot.id) setNotice(safeText(errorMessage(error)))
       })
-    } catch (error) { if (original) restoreDraft(bot.id, original); setNotice(safeText(error.message)) }
+    } catch (error) { if (original) restoreDraft(bot.id, original); setNotice(safeText(errorMessage(error))) }
   }
   const send = () => {
     if (!draft.trim()) return
@@ -179,16 +206,16 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
       if (session.disposed || !result) return
       if (result.status !== 'complete') restoreDraft(botId, original)
       if (session.activeId !== botId) return
-      setNotice(result.status === 'complete' ? `Done · ${count(result.usage?.totalTokens)} tokens · ${(result.durationMs / 1000).toFixed(1)}s` : safeText(result.error || 'Request failed.'))
+      setNotice(result.status === 'complete' ? `Done · ${count(result.usage?.totalTokens)} tokens · ${(Number(result.durationMs) / 1000).toFixed(1)}s` : safeText(result.error || 'Request failed.'))
       if (panel === 'memory') session.readMemory().catch(() => {})
-    }).catch(error => {
-      if (session.disposed || error.code === 'BUNJI_DETACHED') return
+    }).catch((error: unknown) => {
+      if (session.disposed || errorCode(error) === 'BUNJI_DETACHED') return
       restoreDraft(botId, original)
-      if (session.activeId === botId) setNotice(safeText(error.message))
+      if (session.activeId === botId) setNotice(safeText(errorMessage(error)))
     })
   }
 
-  let options = []
+  let options: PickerOption[] = []
   if (modal?.type === 'model') options = modelOptions
   if (modal?.type === 'bots') options = session.bots.map(item => ({ id: item.id, label: `${item.shape} ${item.name}` }))
   if (modal?.type === 'effort') options = effortSteps(bot.provider, bot.model).map(value => ({ id: value, label: value }))
@@ -202,7 +229,7 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
     ...transcriptLines(bot, requests, contentWidth),
   ]
   const sideWidth = (panelOnly ? centerWidth : panelWidth) - 4
-  let sideLines = [], activityRow = 0
+  let sideLines: string[] = [], activityRow = 0
   if (panel === 'tokens') {
     sideLines = tokenLines(requests, Math.max(1, sideWidth))
     if (session.chatClient) sideLines[0] = 'LOADED HISTORY TOTAL'
@@ -222,7 +249,7 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
   if (panel === 'usage') sideLines = usageLines(session.usage, session.usageLoading, Math.max(1, sideWidth))
   if (panel === 'details') sideLines = [
     `${bot.shape} ${safeText(bot.name)}`, '', ...plainLines(bot.description || 'No description yet. Press E to edit.', Math.max(1, sideWidth)), '',
-    runtimes[bot.provider].label, bot.model, 'Effort · ' + bot.effort, '',
+    catalog[bot.provider].label, bot.model, 'Effort · ' + bot.effort, '',
     session.connections[bot.provider]?.connected ? '● Signed in on this Mac' : '○ Sign-in needed',
     bot.provider === 'codex' ? 'codex login' : bot.provider === 'claude' ? 'claude auth login' : 'BUNJI_OLLAMA_URL · Ollama endpoint', '',
     ...plainLines('Memory tools are available in every chat.', Math.max(1, sideWidth)), '', ...computerDetails(bot, sideWidth), '', 'Service working directory', ...plainLines(cwd, Math.max(1, sideWidth)), '',
@@ -252,7 +279,7 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
   const pulse = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'][tick % 10]
 
   usePaste(text => {
-    if (modal && ['new', 'name', 'description'].includes(modal.type)) setModal(current => ({ ...current, value: (current.value + safeText(text)).slice(0, current.type === 'description' ? 1800 : 60) }))
+    if (modal && ['new', 'name', 'description'].includes(modal.type)) setModal(current => ({ ...current!, value: (current!.value + safeText(text)).slice(0, current!.type === 'description' ? 1800 : 60) }))
     else if (!modal && focus === 'input') insert(text)
   })
   useInput((input, key) => {
@@ -263,8 +290,8 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
       if (key.escape) { setModal(null); return }
       if (modal.type === 'preview' || modal.type === 'help') {
         if (key.return) { setModal(null); return }
-        if (key.downArrow || key.pageDown) setModal(current => ({ ...current, selected: current.selected + (key.pageDown ? 10 : 1) }))
-        if (key.upArrow || key.pageUp) setModal(current => ({ ...current, selected: Math.max(0, current.selected - (key.pageUp ? 10 : 1)) }))
+        if (key.downArrow || key.pageDown) setModal(current => ({ ...current!, selected: current!.selected + (key.pageDown ? 10 : 1) }))
+        if (key.upArrow || key.pageUp) setModal(current => ({ ...current!, selected: Math.max(0, current!.selected - (key.pageUp ? 10 : 1)) }))
         return
       }
       if (['new', 'name', 'description'].includes(modal.type)) {
@@ -273,36 +300,36 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
           else session.update({ [modal.type]: modal.value.trim() })
           save(); setModal(null); return
         }
-        if (key.backspace || key.delete) setModal(current => ({ ...current, value: [...current.value].slice(0, -1).join('') }))
-        else if (!key.ctrl && !key.meta && input) setModal(current => ({ ...current, value: (current.value + safeText(input)).slice(0, current.type === 'description' ? 1800 : 60) }))
+        if (key.backspace || key.delete) setModal(current => ({ ...current!, value: [...current!.value].slice(0, -1).join('') }))
+        else if (!key.ctrl && !key.meta && input) setModal(current => ({ ...current!, value: (current!.value + safeText(input)).slice(0, current!.type === 'description' ? 1800 : 60) }))
         return
       }
-      if (key.upArrow || key.leftArrow) setModal(current => ({ ...current, selected: Math.max(0, current.selected - 1) }))
-      else if (key.downArrow || key.rightArrow) setModal(current => ({ ...current, selected: Math.min(options.length - 1, current.selected + 1) }))
+      if (key.upArrow || key.leftArrow) setModal(current => ({ ...current!, selected: Math.max(0, current!.selected - 1) }))
+      else if (key.downArrow || key.rightArrow) setModal(current => ({ ...current!, selected: Math.min(options.length - 1, current!.selected + 1) }))
       else if (key.return && options[modal.selected]) {
         const chosen = options[modal.selected]
         setModal(null)
         if (modal.type === 'commands') invokeCommand(chosen.id)
         if (modal.type === 'model') update({ provider: chosen.provider, model: chosen.id })
-        if (modal.type === 'effort') update({ effort: chosen.id })
+        if (modal.type === 'effort') update({ effort: chosen.id as Effort })
         if (modal.type === 'bots') selectBot(chosen.id)
         if (modal.type === 'color') update({ color: chosen.id })
         if (modal.type === 'shape') update({ avatar: { shape: chosen.id, image: null } })
       } else if (modal.type === 'commands') {
-        if (key.backspace || key.delete) setModal(current => ({ ...current, value: current.value.slice(0, -1), selected: 0 }))
-        else if (!key.ctrl && !key.meta && input) setModal(current => ({ ...current, value: current.value + safeText(input), selected: 0 }))
+        if (key.backspace || key.delete) setModal(current => ({ ...current!, value: current!.value.slice(0, -1), selected: 0 }))
+        else if (!key.ctrl && !key.meta && input) setModal(current => ({ ...current!, value: current!.value + safeText(input), selected: 0 }))
       }
       return
     }
     if (key.ctrl) {
       // Ctrl+M is indistinguishable from Enter in standard terminals.
-      const shortcuts = { b: 'bots', g: 'model', e: 'effort', l: 'tokens', t: 'activity', u: 'usage', o: 'details', n: 'new', p: 'preview' }
+      const shortcuts: Record<string, string> = { b: 'bots', g: 'model', e: 'effort', l: 'tokens', t: 'activity', u: 'usage', o: 'details', n: 'new', p: 'preview' }
       if (input === 'k') { openPicker('commands'); return }
       if (shortcuts[input]) { invokeCommand(shortcuts[input]); return }
     }
     if (key.escape) { setFocus('input'); if (narrow) setPanelOpen(false); return }
     if (key.tab) {
-      const order = ['input', 'chat', ...(showBots ? ['bots'] : []), ...(panelOpen ? ['panel'] : [])]
+      const order: Focus[] = ['input', 'chat', ...(showBots ? ['bots' as const] : []), ...(panelOpen ? ['panel' as const] : [])]
       setFocus(order[(order.indexOf(focus) + (key.shift ? order.length - 1 : 1)) % order.length]); return
     }
     if (key.pageUp || key.pageDown) {
@@ -362,7 +389,7 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
 
   if (width < 44 || height < 16) return h(Box, { width, height, flexDirection: 'column' }, h(Text, { color: 'cyan', bold: true }, 'bunji'), h(Text, null, 'Resize to at least 44 × 16.'), h(Text, { dimColor: true }, 'Ctrl+C exits.'))
 
-  let modalContent
+  let modalContent: ReactNode
   if (modal) {
     const textEntry = ['new', 'name', 'description'].includes(modal.type)
     const modalWidth = Math.max(20, Math.min(74, width - 6))
@@ -392,16 +419,16 @@ export default function BunjiApp({ session, persist, cwd = process.cwd() }) {
         h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, 'Enter confirm · Esc back'))))
   }
   return h(Box, { width, height, flexDirection: 'column', overflow: 'hidden' },
-    h(Box, { height: 1, flexShrink: 0, justifyContent: 'space-between' }, h(Text, { bold: true, color: bot.color }, ` ${bot.shape} bunji `), h(Text, { dimColor: true, wrap: 'truncate' }, fit(safeText(cwd), width - 22)), h(Text, { color: session.connections[bot.provider]?.connected ? 'green' : 'gray' }, session.connections[bot.provider] ? session.connections[bot.provider].connected ? ' ● connected ' : ' ○ sign in ' : ' ◌ checking ')),
+    h(Box, { height: 1, flexShrink: 0, justifyContent: 'space-between' }, h(Text, { bold: true, color: bot.color }, ` ${bot.shape} bunji `), h(Text, { dimColor: true, wrap: 'truncate' }, fit(safeText(cwd), width - 22)), h(Text, { color: session.connections[bot.provider]?.connected ? 'green' : 'gray' }, session.connections[bot.provider] ? session.connections[bot.provider]?.connected ? ' ● connected ' : ' ○ sign in ' : ' ◌ checking ')),
     modal ? modalContent : h(Box, { height: bodyHeight, flexShrink: 0 },
       showBots && h(Pane, { title: 'BUNJIBOX', width: sidebarWidth, height: bodyHeight, active: focus === 'bots', color: bot.color },
         h(Box, { flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }, session.bots.slice(firstVisibleBot, firstVisibleBot + visibleBots).map(item => h(Box, { key: item.id, flexDirection: 'column', marginBottom: 1 }, h(Text, { color: item.color, bold: item.id === bot.id, wrap: 'truncate' }, `${item.id === bot.id ? '›' : ' '} ${item.shape} ${safeText(item.name)}`), h(Text, { dimColor: true, wrap: 'truncate' }, '    ' + item.provider)))),
         h(Text, { dimColor: true }, 'Ctrl+N New bot'), h(Text, { dimColor: true }, 'Ctrl+U Usage')),
       h(Box, { width: centerWidth, flexDirection: 'column' },
         h(Pane, { title: panelOnly ? panel.toUpperCase() : `${bot.shape} ${safeText(bot.name)}${session.busy?.botId === bot.id ? '  ' + pulse + ' working' : ''}`, width: centerWidth, height: chatHeight, active: focus === 'chat' || panelOnly, color: bot.color }, h(Lines, { lines: panelOnly ? sideLines : chatLines, height: contentHeight, width: contentWidth, offset: panelOnly ? sideOffset : scroll.chat, fromBottom: !panelOnly })),
-        h(Box, { height: 1, justifyContent: 'space-between', paddingX: 1 }, h(Text, { color: bot.color, wrap: 'truncate' }, `${runtimes[bot.provider].models.find(model => model.id === bot.model)?.label} · ${bot.effort}`), h(Text, { dimColor: true, wrap: 'truncate' }, `${pending && measured ? '≥ ' : ''}${count(measured || !requests.length ? total : null)} tokens${session.chatClient ? ' (loaded)' : ''}`)),
+        h(Box, { height: 1, justifyContent: 'space-between', paddingX: 1 }, h(Text, { color: bot.color, wrap: 'truncate' }, `${catalog[bot.provider].models.find(model => model.id === bot.model)?.label} · ${bot.effort}`), h(Text, { dimColor: true, wrap: 'truncate' }, `${pending && measured ? '≥ ' : ''}${count(measured || !requests.length ? total : null)} tokens${session.chatClient ? ' (loaded)' : ''}`)),
         h(Pane, { title: 'MESSAGE  ·  Enter send  / commands', width: centerWidth, height: composeHeight, active: focus === 'input', color: bot.color }, h(Editor, { draft, cursor, width: contentWidth, height: composeHeight - 3, focused: focus === 'input' }))),
       panelWidth > 0 && h(Pane, { title: panel.toUpperCase() + ' · Tab to focus', width: panelWidth, height: bodyHeight, active: focus === 'panel', color: bot.color }, h(Lines, { lines: sideLines, height: sideHeight, width: sideWidth, offset: sideOffset }))),
-    h(Text, { color: session.busy ? 'yellow' : 'gray', wrap: 'truncate' }, fit(' ' + (session.chatError ? safeText(session.chatError) : session.busy ? `${pulse} ${session.bots.find(item => item.id === session.busy.botId)?.name} working · Ctrl+X stop` : safeText(session.botClient?.getSnapshot().error || (session.botClient?.getSnapshot().pending ? 'Saving shared bot settings…' : notice))), width)),
+    h(Text, { color: session.busy ? 'yellow' : 'gray', wrap: 'truncate' }, fit(' ' + (session.chatError ? safeText(session.chatError) : session.busy ? `${pulse} ${session.bots.find(item => item.id === session.busy!.botId)?.name} working · Ctrl+X stop` : safeText(session.botClient?.getSnapshot().error || (session.botClient?.getSnapshot().pending ? 'Saving shared bot settings…' : notice))), width)),
     h(Text, { dimColor: true, wrap: 'truncate' }, fit(width < 90 ? ' ^K Commands  ^G Model  ^E Effort  ^T Activity  ^C Exit' : ' ^K Commands  ^B Bots  ^G Model  ^E Effort  ^T Activity  ^L Tokens  ^U Usage  ^C Exit', width)))
 }

@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { fileURLToPath } from 'node:url'
 
 const execute = promisify(execFile)
@@ -99,14 +100,14 @@ test('native avatar generation retries, cancellation, late results and image lim
     const status = run.prompt === 'keep-polling' || (run.prompt === 'cancel-expired' && firstRun) ? 'running' : 'complete'
     send(200, { generation: { id: run.id, status, image: status === 'complete' ? image : null, error: null } })
   })
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => server.close(resolve)))
   const sources = ['Models.swift', 'BunjiAPI.swift', 'AvatarImageData.swift', 'AvatarGenerationStore.swift']
     .map(file => join(native, 'Sources/BunjiBoxMac', file))
   const executable = join(directory, 'avatar-generation-checks')
   await execute('swiftc', ['-swift-version', '6', ...sources,
     join(native, 'Checks/AvatarGenerationChecks.swift'), '-o', executable])
-  const { stdout } = await execute(executable, [`http://127.0.0.1:${server.address().port}`, imagePath])
+  const { stdout } = await execute(executable, [`http://127.0.0.1:${(server.address() as AddressInfo).port}`, imagePath])
   assert.match(stdout, /checks passed/)
   for (const prompt of ['create-retry', 'transport-retry', 'server-retry']) {
     assert.ok(posts.get(prompt).length >= 2)

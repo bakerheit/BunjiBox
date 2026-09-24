@@ -5,12 +5,13 @@
   "type": "module",
   "description": "The `bunji` terminal app. The root package owns the bin so `npm link` keeps working.",
   "exports": {
-    ".": "./index.mjs",
-    "./*": "./*.mjs"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
   "scripts": {
-    "start": "node index.mjs",
-    "test": "node --test *.test.mjs"
+    "start": "node src/index.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p . && tsc -p test"
   },
   "dependencies": {
     "@bunji/core": "*",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/marked-terminal": "^6.1.1",
+    "@types/react": "^19.3.0",
     "@xterm/headless": "^6.0.0"
   }
 }

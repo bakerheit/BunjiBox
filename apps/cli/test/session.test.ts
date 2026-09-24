@@ -1,11 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile, stat, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { BunjiSession, defaultBots, conversationPrompt } from './session.mjs'
-import { loadBots, saveBots } from './config.mjs'
-import { markdownLines, safeText, tokenLines } from './format.mjs'
+import { BunjiSession, defaultBots, conversationPrompt } from '../src/session.ts'
+import { markdownLines, safeText, tokenLines } from '../src/format.ts'
 import { providerCommand, MAX_PROMPT_LENGTH } from '@bunji/core/runtime'
 
 test('shared runner validates settings and passes prompts as single arguments without a shell', () => {
@@ -76,21 +72,6 @@ test('cancellation and activity updates stay with the originating bot', async ()
   assert.equal(session.requests[0].activities[0].status, 'unknown')
   assert.equal(session.requests[0].usage.totalTokens, 42)
   assert.equal(session.busy, null)
-})
-
-test('bot settings round-trip privately; invalid config is not silently overwritten', async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'bunji-config-test-'))
-  t.after(() => rm(dir, { recursive: true, force: true }))
-  const path = join(dir, 'settings', 'config.json')
-  assert.deepEqual(await loadBots(path), defaultBots())
-  const bots = defaultBots()
-  bots[0].name = 'My helper'
-  await saveBots(bots, path)
-  assert.deepEqual(await loadBots(path), bots)
-  assert.equal((await stat(path)).mode & 0o777, 0o600)
-  await writeFile(path, '{bad json')
-  await assert.rejects(loadBots(path), /Fix or move this file/)
-  assert.equal(await readFile(path, 'utf8'), '{bad json')
 })
 
 test('terminal output strips cursor, clipboard and color escape injection', () => {

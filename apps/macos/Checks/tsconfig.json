@@ -1,0 +1,6 @@
+{
+  // Node drivers for the Swift checks. They are not part of any workspace, so
+  // typecheck them directly: npx tsc -p apps/macos/Checks
+  "extends": "../../../tsconfig.test.json",
+  "include": ["."]
+}

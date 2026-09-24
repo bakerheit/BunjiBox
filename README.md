@@ -93,6 +93,8 @@ npm link
 bunji
 ```
 
+Use `npm link` rather than a global install from a packed copy: Node runs the
+CLI's TypeScript source directly and won't do that from inside `node_modules`.
 Or run `npm run bunji` directly from this folder. The terminal app runs on its
 own; it starts the shared Bunji API when needed and does not need Vite. It uses a full-screen buffer,
 resizes with the terminal, and restores the shell when you exit.

@@ -8,20 +8,20 @@
     "packages/*"
   ],
   "bin": {
-    "bunji": "apps/cli/index.mjs"
+    "bunji": "apps/cli/src/index.ts"
   },
   "engines": {
     "node": ">=22.18"
   },
   "scripts": {
-    "bunji": "node apps/cli/index.mjs",
+    "bunji": "node apps/cli/src/index.ts",
     "dev": "npm run dev -w @bunji/app --",
     "dev:site": "npm run dev -w @bunji/site --",
     "api": "npm run start -w @bunji/server --",
     "macos:build": "swift build --package-path apps/macos",
     "macos:run": "swift run --package-path apps/macos BunjiBoxMac",
     "macos:app": "zsh apps/macos/Scripts/build-app.sh",
-    "macos:check": "node --test apps/macos/Checks/*.test.mjs",
+    "macos:check": "node --test apps/macos/Checks/*.test.ts",
     "build": "npm run build --workspaces --if-present",
     "build:site": "npm run build -w @bunji/site",
     "lint": "oxlint",

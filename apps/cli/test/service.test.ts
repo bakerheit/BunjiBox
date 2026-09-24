@@ -9,22 +9,23 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { DatabaseSync } from 'node:sqlite'
-import { ensureChatService } from './service.mjs'
+import { ensureChatService } from '../src/service.ts'
 
 const exec = promisify(execFile)
-const index = fileURLToPath(new URL('./index.mjs', import.meta.url))
-const entry = fileURLToPath(new URL('../server/server.mjs', import.meta.url))
+const index = fileURLToPath(new URL('../src/index.ts', import.meta.url))
+const entry = fileURLToPath(new URL('../../server/src/main.ts', import.meta.url))
 const workspace = '/fixture/bunji-data', cwd = '/fixture/working-directory'
-const health = changes => ({ service: 'bunji', continuity: 1, workspace: createHash('sha256').update(workspace).digest('hex'), cwd, ...changes })
-const response = (body = health(), status = 200) => new Response(JSON.stringify(body), { status })
+const health = (changes?: Record<string, unknown>) => ({ service: 'bunji', continuity: 1, workspace: createHash('sha256').update(workspace).digest('hex'), cwd, ...changes })
+const response = (body: unknown = health(), status = 200) => new Response(JSON.stringify(body), { status })
 const absent = () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }) }
 const options = { cwd, workspace, port: 4318, pollMs: 1, timeoutMs: 100 }
 const noSpawn = () => { assert.fail('Must not spawn a service') }
 function launcher() {
   const calls = []
   const spawnProcess = (...args) => {
-    const child = new EventEmitter()
+    const child: any = new EventEmitter()
     child.unref = () => { child.unreferenced = true }
     child.kill = () => assert.fail('Must never kill a service')
     calls.push({ args, child }); return child
@@ -58,7 +59,7 @@ test('old, unknown, mismatched, malformed and unresponsive services never spawn 
     [async () => new Response('<html>Other app</html>'), /not JSON/],
     [async () => response({}, 503), /HTTP 503/],
     [async () => { throw new Error('Timeout') }, /Cannot verify/],
-  ]) await assert.rejects(ensureChatService({ ...options, fetcher, spawnProcess: noSpawn }), pattern)
+  ] as [() => Promise<Response>, RegExp][]) await assert.rejects(ensureChatService({ ...options, fetcher, spawnProcess: noSpawn }), pattern)
   await assert.rejects(ensureChatService({ ...options, explicitCwd: true, fetcher: async () => response(health({ cwd: '/other/project' })), spawnProcess: noSpawn }), /--cwd requested.*running Bunji service works in \/other\/project/)
 })
 
@@ -103,9 +104,9 @@ test('launcher reports startup errors and bounded timeouts without touching othe
 test('real loopback health check verifies identity without starting the real app or opening its DB', async t => {
   const dir = await directory(t)
   const server = http.createServer((_request, reply) => { reply.setHeader('content-type', 'application/json'); reply.end(JSON.stringify(health({ cwd: dir }))) })
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => server.close(resolve)))
-  const result = await ensureChatService({ ...options, cwd: dir, explicitCwd: true, port: server.address().port, timeoutMs: 3000, spawnProcess: noSpawn })
+  const result = await ensureChatService({ ...options, cwd: dir, explicitCwd: true, port: (server.address() as AddressInfo).port, timeoutMs: 3000, spawnProcess: noSpawn })
   assert.equal(result.cwd, dir)
   assert.equal(result.started, false)
 })
@@ -116,8 +117,8 @@ test('CLI help and nonterminal errors do not start a service or create workspace
   const { stdout } = await exec(process.execPath, [index, '--help'], { env })
   assert.match(stdout, /memory tools/i)
   assert.match(stdout, /Exit detaches/)
-  await assert.rejects(exec(process.execPath, [index], { env }), error => /needs a terminal/.test(error.stderr))
-  await assert.rejects(readFile(join(data, 'workspace.sqlite')), error => error.code === 'ENOENT')
+  await assert.rejects(exec(process.execPath, [index], { env }), (error: any) => /needs a terminal/.test(error.stderr))
+  await assert.rejects(readFile(join(data, 'workspace.sqlite')), (error: any) => error.code === 'ENOENT')
 })
 
 test('stateless -p uses only a fake direct provider, honors --cwd and never calls shared chat', async t => {

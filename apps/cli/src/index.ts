@@ -2,14 +2,19 @@
 import { parseArgs } from 'node:util'
 import { resolve } from 'node:path'
 import { createElement } from 'react'
-import { runProvider, providerCommand, runtimes, normalizeMode } from '@bunji/core/runtime'
-import { BunjiSession } from './session.mjs'
+import { runProvider, providerCommand } from '@bunji/core/runtime'
+import type { BotStore } from '@bunji/core/bot-store'
+import { BunjiSession } from './session.ts'
 import { BotClient } from '@bunji/shared/bot-client'
 import { ChatClient } from '@bunji/shared/chat-client'
 import { botTransport } from '@bunji/shared/bot-api'
 import { cliBot } from '@bunji/shared/bots'
-import { safeText } from './format.mjs'
-import { ensureChatService } from './service.mjs'
+import { errorMessage } from '@bunji/shared/errors'
+import { isProvider, normalizeMode, providers, runtimes, supportsModel } from '@bunji/shared/runtimes'
+import type { Effort } from '@bunji/shared/types'
+import { safeText } from './format.ts'
+import { ensureChatService } from './service.ts'
+import type { ChatServiceConnection } from './service.ts'
 import { routeAutoPrompt } from '@bunji/shared/auto-mode'
 
 const HELP = `bunji — the BunjiBox terminal workbench
@@ -40,7 +45,7 @@ Ask the bot to remember a useful fact in any message. /remember still works as a
 The -p mode is a direct, stateless request; --demo stays offline.
 `
 
-let workspaceStore, sharedBots, session
+let workspaceStore: BotStore | undefined, sharedBots: BotClient | undefined, session: BunjiSession | undefined
 try {
   const { values, positionals } = parseArgs({ options: {
     help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' },
@@ -54,33 +59,36 @@ try {
   if (values.demo && values.print !== undefined) throw new Error('--demo is an interactive preview. Run bunji --demo.')
   if (values.cwd) process.chdir(resolve(values.cwd))
   if (values.print === undefined && (!process.stdin.isTTY || !process.stdout.isTTY)) throw new Error('The full-screen app needs a terminal. Use bunji -p "prompt" in scripts.')
-  const { createDemoSession } = values.demo ? await import('./demo.mjs') : {}
-  let service, chatClient
-  if (!values.demo) {
+  let service: ChatServiceConnection | undefined
+  if (values.demo) session = (await import('./demo.ts')).createDemoSession()
+  else {
+    let chatClient: ChatClient | undefined
     if (values.print === undefined) {
       service = await ensureChatService({ cwd: process.cwd(), explicitCwd: values.cwd !== undefined })
+      const { baseUrl } = service
       if (service.notice) process.stderr.write(safeText(service.notice) + '\n')
-      sharedBots = new BotClient(botTransport((path, options) => fetch(service.baseUrl + path, options)))
-      chatClient = new ChatClient({ baseUrl: service.baseUrl })
+      sharedBots = new BotClient(botTransport((path, options) => fetch(baseUrl + path, options)))
+      chatClient = new ChatClient({ baseUrl })
     } else {
       const { openBotStore } = await import('@bunji/core/bot-store')
       workspaceStore = openBotStore()
       sharedBots = new BotClient(workspaceStore)
     }
     await sharedBots.initialize()
+    session = new BunjiSession({ bots: sharedBots.getSnapshot().bots.map(cliBot), botClient: values.print === undefined ? sharedBots : null, chatClient })
   }
-  session = values.demo ? createDemoSession() : new BunjiSession({ bots: sharedBots.getSnapshot().bots.map(cliBot), botClient: values.print === undefined ? sharedBots : null, chatClient })
   const override = { ...session.bot }
   if (values.provider) {
-    if (!Object.hasOwn(runtimes, values.provider)) throw new Error('Unknown provider.')
+    if (!isProvider(values.provider)) throw new Error('Unknown provider.')
     override.provider = values.provider; override.model = runtimes[values.provider].models[0].id
   }
   if (values.model) {
-    const provider = Object.keys(runtimes).find(id => runtimes[id].models.some(model => model.id === values.model))
+    const provider = providers.find(id => supportsModel(id, values.model))
     if (!provider || (values.provider && values.provider !== provider)) throw new Error('Model does not belong to the selected provider.')
     override.provider = provider; override.model = values.model
   }
-  if (values.effort) override.effort = values.effort
+  // providerCommand below rejects an effort the model does not support.
+  if (values.effort) override.effort = values.effort as Effort
   override.mode = normalizeMode(override.provider, override.mode)
   // Validate exact CLI arguments before normalizeRuntime can fall back.
   const selected = { ...session.bot, ...override }
@@ -110,18 +118,20 @@ try {
     else if (result.text) process.stdout.write(safeText(result.text) + '\n')
     if (!result.ok) { if (!values.json) process.stderr.write(safeText(result.error || 'Request failed.') + '\n'); process.exitCode = controller.signal.aborted ? 130 : 1 }
   } else {
-    const [{ render }, { default: App }] = await Promise.all([import('ink'), import('./app.mjs')])
+    const [{ render }, { default: App }] = await Promise.all([import('ink'), import('./app.ts')])
+    const interactive = session
     sharedBots?.start()
-    const app = render(createElement(App, { session, ...(values.demo ? { persist: async () => {}, cwd: 'DEMO · no provider calls or saved settings' } : { cwd: service.cwd }) }), {
+    // Outside the demo, the service connection was made above.
+    const app = render(createElement(App, { session: interactive, ...(values.demo ? { persist: async () => {}, cwd: 'DEMO · no provider calls or saved settings' } : { cwd: service!.cwd }) }), {
       alternateScreen: true, incrementalRendering: true, maxFps: 24, exitOnCtrlC: false,
     })
-    const stop = () => { session.dispose(); app.unmount() }
+    const stop = () => { interactive.dispose(); app.unmount() }
     process.once('SIGTERM', stop); process.once('SIGHUP', stop)
     try { await app.waitUntilExit() }
-    finally { session.dispose(); process.removeListener('SIGTERM', stop); process.removeListener('SIGHUP', stop) }
+    finally { interactive.dispose(); process.removeListener('SIGTERM', stop); process.removeListener('SIGHUP', stop) }
   }
 } catch (error) {
-  process.stderr.write('bunji: ' + safeText(error.message) + '\n')
+  process.stderr.write('bunji: ' + safeText(errorMessage(error)) + '\n')
   process.exitCode = 1
 } finally {
   session?.dispose()

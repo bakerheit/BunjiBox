@@ -5,9 +5,9 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { createElement } from 'react'
 import { render } from 'ink'
 import xterm from '@xterm/headless'
-import { BunjiSession } from './session.mjs'
+import { BunjiSession } from '../src/session.ts'
 import { ChatClient } from '@bunji/shared/chat-client'
-import App from './app.mjs'
+import App from '../src/app.ts'
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
 const turn = (id, patch = {}) => ({ id, prompt: 'Saved question', provider: 'codex', model: 'gpt-6-astra', effort: 'medium', memoryWrite: false,
@@ -19,10 +19,10 @@ async function until(check) {
 
 function serviceFixture() {
   const records = new Map(), revisions = new Map(), messages = [], cancelled = [], reads = [], older = new Map()
-  const hooks = {}
+  const hooks: any = {}
   const put = (botId, requests) => { records.set(botId, requests); revisions.set(botId, (revisions.get(botId) || 0) + 1) }
   const finish = (botId, id, patch = {}) => put(botId, records.get(botId).map(item => item.id === id ? { ...item, status: 'complete', text: 'Finished', durationMs: 30, ...patch } : item))
-  const fetcher = async (path, options = {}) => {
+  const fetcher = async (path: string, options: any = {}) => {
     const url = new URL(path, 'http://fixture.test'), [, , , botId, action, noteId] = url.pathname.split('/')
     const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } })
     if (url.pathname.startsWith('/api/runs/')) {
@@ -55,7 +55,7 @@ function serviceFixture() {
 
 function sessionFixture(t, service = serviceFixture()) {
   const chatClient = service.client()
-  const session = new BunjiSession({ chatClient, status: async () => ({ connected: true }), usage: async () => ({}), run: () => { throw new Error('Shared chats must not use the direct runner') } })
+  const session = new BunjiSession({ chatClient, status: async () => ({ connected: true }), usage: async () => ({ providers: {} }), run: () => { throw new Error('Shared chats must not use the direct runner') } })
   t.after(() => session.dispose())
   return { session, chatClient, service }
 }
@@ -124,7 +124,7 @@ test('dispose detaches without cancelling; another CLI session attaches to the o
   const { session, service, chatClient } = sessionFixture(t)
   await session.connect()
   const pending = session.send('Keep running')
-  const rejection = assert.rejects(pending, error => error.code === 'BUNJI_DETACHED')
+  const rejection = assert.rejects(pending, (error: any) => error.code === 'BUNJI_DETACHED')
   await until(() => session.requests.length === 1)
   session.dispose()
   await rejection
@@ -177,14 +177,14 @@ test('loadOlder preserves saved messages and direct demo sessions have no memory
 
 async function terminalApp(t, session) {
   const terminal = new xterm.Terminal({ cols: 120, rows: 40, allowProposedApi: true, convertEol: true })
-  const stdin = new PassThrough()
+  const stdin: any = new PassThrough()
   stdin.isTTY = true; stdin.setRawMode = raw => { stdin.isRaw = raw }; stdin.ref = stdin.unref = () => stdin
-  const stdout = new Writable({ write(chunk, _encoding, done) { terminal.write(chunk.toString(), done) } })
+  const stdout: any = new Writable({ write(chunk, _encoding, done) { terminal.write(chunk.toString(), done) } })
   Object.assign(stdout, { isTTY: true, columns: 120, rows: 40 })
   const app = render(createElement(App, { session, cwd: '/fixture/service-cwd' }), { stdin, stdout, stderr: stdout, patchConsole: false, interactive: true,
     alternateScreen: true, incrementalRendering: true, exitOnCtrlC: false, maxFps: 60, kittyKeyboard: { mode: 'disabled' } })
   t.after(async () => { app.unmount(); await app.waitUntilExit(); app.cleanup(); terminal.dispose(); stdin.destroy(); stdout.destroy() })
-  const flush = async () => { await delay(40); await app.waitUntilRenderFlush(); await new Promise(resolve => terminal.write('', resolve)) }
+  const flush = async () => { await delay(40); await app.waitUntilRenderFlush(); await new Promise<void>(resolve => terminal.write('', resolve)) }
   const key = async value => { stdin.write(value); await flush() }
   const command = async value => { await key('\u001b'); await key('\u001b[200~' + value + '\u001b[201~'); await key('\r') }
   const screen = () => Array.from({ length: terminal.rows }, (_, i) => terminal.buffer.active.getLine(terminal.buffer.active.viewportY + i)?.translateToString(true) || '').join('\n')

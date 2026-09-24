@@ -5,18 +5,19 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { createElement } from 'react'
 import { render } from 'ink'
 import xterm from '@xterm/headless'
-import App from './app.mjs'
-import { BunjiSession } from './session.mjs'
+import type { Activity } from '@bunji/shared/types'
+import App from '../src/app.ts'
+import { BunjiSession } from '../src/session.ts'
 
 async function terminalApp(t, columns = 120, rows = 36) {
   const terminal = new xterm.Terminal({ cols: columns, rows, allowProposedApi: true, convertEol: true })
-  await new Promise(resolve => terminal.write('ORIGINAL_SHELL_PROMPT', resolve))
-  const stdin = new PassThrough()
+  await new Promise<void>(resolve => terminal.write('ORIGINAL_SHELL_PROMPT', resolve))
+  const stdin: any = new PassThrough()
   stdin.isTTY = true
   stdin.setRawMode = raw => { stdin.isRaw = raw }
   stdin.ref = stdin.unref = () => stdin
   let raw = ''
-  const stdout = new Writable({ write(chunk, _encoding, done) { raw += chunk.toString(); terminal.write(chunk.toString(), done) } })
+  const stdout: any = new Writable({ write(chunk, _encoding, done) { raw += chunk.toString(); terminal.write(chunk.toString(), done) } })
   Object.assign(stdout, { isTTY: true, columns, rows })
   const calls = [], saves = []
   const session = new BunjiSession({
@@ -24,7 +25,7 @@ async function terminalApp(t, columns = 120, rows = 36) {
     usage: async () => ({ providers: { codex: { label: 'Codex', windows: [{ label: 'Five-hour window', usedPercent: 25, remainingPercent: 75, resetsAt: null }] } } }),
     run: async (options, { onActivity }) => {
       calls.push(options)
-      const activity = { id: 'cmd', kind: 'tool', title: 'Run command', status: 'running', input: 'printf TEST_TOOL_OK' }
+      const activity: Activity = { id: 'cmd', kind: 'tool', title: 'Run command', status: 'running', input: 'printf TEST_TOOL_OK' }
       onActivity(activity)
       onActivity({ ...activity, status: 'complete', output: 'TEST_TOOL_OK', exitCode: 0 })
       return { ok: true, text: '## Hello\n\n- **Ready** to help', usage: { inputTokens: 100, outputTokens: 24, cachedInputTokens: 50, totalTokens: 124 }, durationMs: 20 }
@@ -32,7 +33,7 @@ async function terminalApp(t, columns = 120, rows = 36) {
   })
   const app = render(createElement(App, { session, cwd: '/test/workspace', persist: async bots => saves.push(bots) }), { stdin, stdout, stderr: stdout, patchConsole: false, interactive: true, alternateScreen: true, incrementalRendering: true, exitOnCtrlC: false, maxFps: 60, kittyKeyboard: { mode: 'disabled' } })
   t.after(async () => { app.unmount(); await app.waitUntilExit(); app.cleanup(); terminal.dispose(); stdin.destroy(); stdout.destroy() })
-  const flush = async () => { await delay(35); await app.waitUntilRenderFlush(); await new Promise(resolve => terminal.write('', resolve)) }
+  const flush = async () => { await delay(35); await app.waitUntilRenderFlush(); await new Promise<void>(resolve => terminal.write('', resolve)) }
   const screen = () => Array.from({ length: terminal.rows }, (_, i) => terminal.buffer.active.getLine(terminal.buffer.active.viewportY + i)?.translateToString(true) || '').join('\n')
   const key = async value => { stdin.write(value); await flush() }
   const resize = async (cols, newRows) => { terminal.resize(cols, newRows); stdout.columns = cols; stdout.rows = newRows; stdout.emit('resize'); await flush() }

@@ -6,9 +6,10 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { fileURLToPath } from 'node:url'
-import { openBotStore } from '../../../packages/core/src/bot-store.mjs'
-import { createBotRoutes } from '../../server/src/bots.mjs'
+import { openBotStore } from '../../../packages/core/src/bot-store.ts'
+import { createBotRoutes } from '../../server/src/routes/bots.ts'
 
 const execute = promisify(execFile)
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -21,14 +22,14 @@ test('Swift profile requests persist through the real bot API', { skip: process.
   store.create({ id: 'native-profile-check', name: 'Original name' })
   const route = createBotRoutes(store)
   const server = createServer((request, response) => void route(request, response))
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => server.close(resolve)))
   const sources = ['Models.swift', 'BunjiAPI.swift', 'AvatarImageData.swift']
     .map(file => resolve(root, 'macos/Sources/BunjiBoxMac', file))
   const executable = join(directory, 'profile-checks')
   await execute('swiftc', ['-swift-version', '6', ...sources,
     resolve(root, 'macos/Checks/ProfileChecks.swift'), '-o', executable])
-  const { stdout } = await execute(executable, [`http://127.0.0.1:${server.address().port}`,
+  const { stdout } = await execute(executable, [`http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     resolve(root, 'app/public/teal-bot.png')])
   assert.match(stdout, /checks passed/)
   assert.equal(store.list().bots.find(bot => bot.id === 'native-profile-check').avatar.image, null)
