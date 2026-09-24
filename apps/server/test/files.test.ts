@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, symlink, rename } fr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { setTimeout as delay } from 'node:timers/promises'
 import { openFileStore } from '@bunji/core/file-store'
 import { createFileRoutes } from '../src/routes/files.ts'
@@ -16,12 +17,13 @@ import { createMemoryServer } from '@bunji/core/memory-mcp'
 import { openMemoryStore } from '@bunji/core/memory-store'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import type { ComputerProfile, FilePreview, HistoryPage, ProviderResult } from '@bunji/shared/types'
 
 async function fixture(t) {
   const dir = await mkdtemp(join(await realpath(tmpdir()), 'bunji-files-test-'))
   const path = join(dir, 'data', 'workspace.sqlite'), files = openFileStore({ path })
   const folder = join(dir, 'work'); await mkdir(folder)
-  const computer = { scope: 'folder', folder, level: 'auto', network: 'off' }
+  const computer = { scope: 'folder', folder, level: 'auto', network: 'off' } as const
   t.after(async () => { files.close(); await rm(dir, { recursive: true, force: true }) })
   return { dir, path, files, folder, computer }
 }
@@ -34,18 +36,18 @@ test('registered files persist, deduplicate and respect agent and folder boundar
   assert.equal((await f.files.register('alpha', 'run-1', path, { computer: f.computer })).id, saved.id)
   assert.equal((await f.files.list('alpha')).length, 1)
   assert.equal((await f.files.list('beta')).length, 0)
-  await assert.rejects(f.files.preview('beta', saved.id), error => error.status === 404)
-  await assert.rejects(f.files.register('alpha', 'run-1', path, { computer: { scope: 'none' } }), error => error.status === 403)
+  await assert.rejects(f.files.preview('beta', saved.id), (error: any) => error.status === 404)
+  await assert.rejects(f.files.register('alpha', 'run-1', path, { computer: { scope: 'none' } as ComputerProfile }), (error: any) => error.status === 403)
   const outside = join(f.dir, 'outside.txt'); await writeFile(outside, 'outside')
-  await assert.rejects(f.files.register('alpha', 'run-1', outside, { computer: f.computer }), error => error.status === 403)
+  await assert.rejects(f.files.register('alpha', 'run-1', outside, { computer: f.computer }), (error: any) => error.status === 403)
   await symlink(outside, join(f.folder, 'escape.txt'))
-  await assert.rejects(f.files.register('alpha', 'run-1', join(f.folder, 'escape.txt'), { computer: f.computer }), error => error.status === 403)
+  await assert.rejects(f.files.register('alpha', 'run-1', join(f.folder, 'escape.txt'), { computer: f.computer }), (error: any) => error.status === 403)
   const reopened = openFileStore({ path: f.path })
   try { assert.equal((await reopened.preview('alpha', saved.id)).text, '# Plan\n\nHello.') } finally { reopened.close() }
   await rename(path, path + '.moved')
   assert.equal((await f.files.list('alpha'))[0].available, false)
   await symlink(outside, path)
-  await assert.rejects(f.files.preview('alpha', saved.id), error => error.status === 404)
+  await assert.rejects(f.files.preview('alpha', saved.id), (error: any) => error.status === 404)
 })
 
 test('HTTP serves scoped IDs, bounded previews and exact downloads without executing HTML', async t => {
@@ -55,10 +57,10 @@ test('HTTP serves scoped IDs, bounded previews and exact downloads without execu
   const saved = await f.files.register('alpha', 'run-1', path, { computer: f.computer })
   const handler = createFileRoutes({ files: f.files, service: { botFor: id => { if (!['alpha', 'beta'].includes(id)) throw Object.assign(new Error('Missing bot'), { status: 404 }) } } })
   const server = http.createServer(async (req, res) => { if (!await handler(req, res)) { res.writeHead(404); res.end() } })
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections() }))
-  const base = `http://127.0.0.1:${server.address().port}/api/bots`
-  const preview = await (await fetch(`${base}/alpha/files/${saved.id}/preview`)).json()
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/bots`
+  const preview = await (await fetch(`${base}/alpha/files/${saved.id}/preview`)).json() as FilePreview
   assert.equal(preview.truncated, true); assert.equal(preview.text.length, 128 * 1024)
   const download = await fetch(`${base}/alpha/files/${saved.id}/download`)
   assert.equal(await download.text(), content)
@@ -105,7 +107,7 @@ test('shared runs index shell outputs, native edits and MCP-published files', as
       assert.ok(!response.isError)
     } finally { await client.close(); await bridge.close() }
     const linked = join(f.folder, 'linked output.txt'); await writeFile(linked, 'Linked shell output')
-    return { ok: true, text: `Done. [Download](<${linked}>)` }
+    return { ok: true, text: `Done. [Download](<${linked}>)` } as ProviderResult
   } })
   t.after(async () => { await service.close(); chats.close(); bots.close() })
   service.start('bunjibox', { id: 'run-files', prompt: 'Create files', provider: 'codex', model: 'gpt-5.6-luna', effort: 'low' })
@@ -120,7 +122,7 @@ test('history recovery uses completed absolute write paths and output scans igno
   const f = await fixture(t), bot = { id: 'alpha', computer: f.computer }
   const path = join(f.folder, 'prior.md'); await writeFile(path, 'prior')
   const linked = join(f.folder, 'spreadsheet.csv'); await writeFile(linked, 'a,b')
-  const chats = { history: () => ({ hasMore: false, requests: [{ id: 'old-run', text: `[Download](<${linked}>)`, activities: [{ status: 'complete', title: 'File changes', input: JSON.stringify([{ path, kind: 'add' }, { path: 'relative.md', kind: 'add' }]) }] }] }) }
+  const chats = { history: () => ({ hasMore: false, requests: [{ id: 'old-run', text: `[Download](<${linked}>)`, activities: [{ status: 'complete', title: 'File changes', input: JSON.stringify([{ path, kind: 'add' }, { path: 'relative.md', kind: 'add' }]) }] }] }) as HistoryPage }
   await recoverFileHistory({ bot, chats, files: f.files })
   assert.deepEqual((await f.files.list('alpha')).map(file => file.name).sort(), ['prior.md', 'spreadsheet.csv'])
   const output = f.files.outputDirectory(bot, 'new-run'); await f.files.prepare(output, f.computer)

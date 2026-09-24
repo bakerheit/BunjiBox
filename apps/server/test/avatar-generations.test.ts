@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { setImmediate as tick } from 'node:timers/promises'
 import { createAvatarGenerations } from '@bunji/core/avatar-generation'
 import { createAvatarGenerationRoutes } from '../src/routes/avatar-generations.ts'
@@ -8,6 +9,8 @@ import { createAvatarGenerationRoutes } from '../src/routes/avatar-generations.t
 const id = 'avatar-http-test-0001'
 const basePath = '/api/avatar-generations'
 const image = 'data:image/png;base64,mocked-preview'
+
+type RequestOptions = { method?: string; body?: unknown; raw?: string; headers?: Record<string, string> }
 
 async function fixture(t) {
   const calls = []
@@ -18,14 +21,14 @@ async function fixture(t) {
   const server = createServer(async (request, response) => {
     if (!await route(request, response)) { response.writeHead(404); response.end('{}') }
   })
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(async () => {
     for (const call of calls) call.resolve(image)
     await service.close()
     await new Promise(resolve => server.close(resolve))
   })
-  const origin = `http://127.0.0.1:${server.address().port}`
-  async function request(path = basePath, { method = 'GET', body, raw, headers = {} } = {}) {
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  async function request(path = basePath, { method = 'GET', body, raw, headers = {} }: RequestOptions = {}): Promise<{ status: number; headers: Headers; data: any }> {
     const response = await fetch(origin + path, {
       method, headers: { ...(body !== undefined || raw !== undefined ? { 'content-type': 'application/json' } : {}), ...headers },
       body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
@@ -74,7 +77,7 @@ test('real HTTP rejects foreign origins on creation, polling and cancellation wi
   const f = await fixture(t)
   await f.request(basePath, { method: 'POST', body: { id, prompt: 'A robot' } })
   for (const [path, method, body] of [[basePath, 'POST', { id: `${id}-new`, prompt: 'A cat' }],
-    [`${basePath}/${id}`, 'GET'], [`${basePath}/${id}/cancel`, 'POST', {}]]) {
+    [`${basePath}/${id}`, 'GET'], [`${basePath}/${id}/cancel`, 'POST', {}]] as [string, string, object?][]) {
     const response = await f.request(path, { method, body, headers: { origin: 'https://foreign.example' } })
     assert.equal(response.status, 403)
     assert.match(response.data.error, /Cross-origin/)
@@ -87,7 +90,7 @@ test('real HTTP rejects foreign origins on creation, polling and cancellation wi
 test('real HTTP rejects unsupported verbs and paths without starting jobs', async t => {
   const f = await fixture(t)
   for (const [path, methods] of [[basePath, ['GET', 'PUT', 'DELETE', 'OPTIONS']],
-    [`${basePath}/${id}`, ['POST', 'PUT', 'DELETE']], [`${basePath}/${id}/cancel`, ['GET', 'DELETE']]]) {
+    [`${basePath}/${id}`, ['POST', 'PUT', 'DELETE']], [`${basePath}/${id}/cancel`, ['GET', 'DELETE']]] as [string, string[]][]) {
     for (const method of methods) assert.equal((await f.request(path, { method })).status, 405, `${method} ${path}`)
   }
   for (const path of ['/api/unrelated', `${basePath}/${id}/extra`, `${basePath}-extra`]) {
@@ -104,11 +107,11 @@ test('real HTTP enforces JSON, body size, prompt limits and cancellation body pa
     [{ body: { id, prompt: 'x'.repeat(2001) } }, 400],
     [{ body: { id, prompt: 'A robot', extra: true } }, 400],
     [{ body: { id, prompt: 'x'.repeat(17000) } }, 413],
-  ]) assert.equal((await f.request(basePath, { method: 'POST', ...options })).status, status)
+  ] as [RequestOptions, number][]) assert.equal((await f.request(basePath, { method: 'POST', ...options })).status, status)
   assert.equal(f.calls.length, 0)
   await f.request(basePath, { method: 'POST', body: { id, prompt: 'A robot' }, headers: { 'content-type': 'application/json; charset=utf-8' } })
   for (const [options, status] of [[{ raw: '{bad' }, 400], [{ raw: '{}', headers: { 'content-type': 'text/plain' } }, 415],
-    [{ body: { padding: 'x'.repeat(1100) } }, 413]]) {
+    [{ body: { padding: 'x'.repeat(1100) } }, 413]] as [RequestOptions, number][]) {
     assert.equal((await f.request(`${basePath}/${id}/cancel`, { method: 'POST', ...options })).status, status)
     assert.equal(f.calls[0].signal.aborted, false)
   }

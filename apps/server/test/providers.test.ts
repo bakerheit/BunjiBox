@@ -1,12 +1,13 @@
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createProviderRoutes } from '../src/routes/providers.ts'
 
 async function serve(handler) {
   const server = http.createServer(async (request, response) => { if (!await handler(request, response)) { response.statusCode = 404; response.end() } })
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-  return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise(resolve => server.close(resolve)) }
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
 test('OpenRouter key route verifies before saving and never returns the secret', async t => {

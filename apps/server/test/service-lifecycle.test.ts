@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { openChatStore } from '@bunji/core/chat-store'
+import type { ChatStore } from '@bunji/core/chat-store'
 import { ensureChatService } from '@bunji/cli/service'
 
 const entry = fileURLToPath(new URL('../src/main.ts', import.meta.url))
@@ -27,12 +28,12 @@ async function listening(server) {
 async function privatePort() {
   const reservation = net.createServer()
   const port = await listening(reservation)
-  await new Promise((resolve, reject) => reservation.close(error => error ? reject(error) : resolve()))
+  await new Promise<void>((resolve, reject) => reservation.close(error => error ? reject(error) : resolve()))
   return port
 }
 
-function request(port, path, { method = 'GET', headers = {}, body, agent = false } = {}) {
-  return new Promise((resolve, reject) => {
+function request(port, path, { method = 'GET', headers = {}, body, agent = false }: { method?: string; headers?: Record<string, string>; body?: unknown; agent?: http.Agent | boolean } = {}) {
+  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; data: any }>((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path, method, agent, headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers } }, response => {
       let raw = ''
       response.setEncoding('utf8')
@@ -63,11 +64,11 @@ async function fixture(t) {
   const temp = await mkdtemp(join(await realpath(tmpdir()), 'bunji-service-lifecycle-'))
   const workspace = join(temp, 'workspace'), emptyPath = join(temp, 'empty-bin')
   await Promise.all([mkdir(workspace), mkdir(emptyPath)])
-  const processes = [], stores = new Set(), servers = new Set()
+  const processes = [], stores = new Set<ChatStore>(), servers = new Set<net.Server>()
   t.after(async () => {
     // Only processes, sockets and files created by this fixture are cleaned up.
     for (const server of servers) {
-      await new Promise(resolve => { server.close(resolve); server.closeAllConnections?.() })
+      await new Promise(resolve => { server.close(resolve); (server as http.Server).closeAllConnections?.() })
     }
     for (const process of processes) {
       if (!process.closed) process.child.kill('SIGTERM')
@@ -93,7 +94,8 @@ async function fixture(t) {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let stdout = '', stderr = ''
-    const running = { child, port, closed: false, logs: () => stdout + '\n' + stderr }
+    const running: { child: typeof child; port: number; closed: boolean; logs: () => string; exited?: Promise<{ code: number | null; signal: NodeJS.Signals | null }>; health?: unknown } =
+      { child, port, closed: false, logs: () => stdout + '\n' + stderr }
     child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-16000) })
     child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-16000) })
     child.on('error', error => { stderr += error.message })
@@ -126,7 +128,7 @@ async function fixture(t) {
     assert.equal(running.child.kill('SIGTERM'), true)
     assert.deepEqual(await waitForExit(running), { code: 0, signal: null }, running.logs())
     assert.doesNotMatch(running.logs(), /ERR_INVALID_STATE|database is not open|unhandled rejection/i)
-    await assert.rejects(request(running.port, '/api/health'), error => error.code === 'ECONNREFUSED')
+    await assert.rejects(request(running.port, '/api/health'), (error: any) => error.code === 'ECONNREFUSED')
   }
 
   return { temp, workspace, processes, servers, store, launch, ready, start, stop }
@@ -279,7 +281,7 @@ test('SIGTERM closes an idle keep-alive connection and releases the port cleanly
   assert.ok(Object.values(agent.freeSockets).some(sockets => sockets.length > 0))
   await f.stop(server)
   const reservation = net.createServer()
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     reservation.once('error', reject)
     reservation.listen(server.port, '127.0.0.1', resolve)
   })

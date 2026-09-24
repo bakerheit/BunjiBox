@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,22 +18,22 @@ async function fixture(t, { legacy = false } = {}) {
   const store = openBotStore({ path, workspaceRoot })
   const route = createBotRoutes(store)
   const server = http.createServer((request, response) => void route(request, response))
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-  const origin = `http://127.0.0.1:${server.address().port}`
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   t.after(async () => {
     await new Promise(resolve => server.close(resolve))
     store.close()
     await rm(dir, { recursive: true, force: true })
   })
-  const request = async (url, { method = 'PATCH', body, headers = {}, localOrigin = true } = {}) => {
-    const requestHeaders = { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers }
+  const request = async (url: string, { method = 'PATCH', body, headers = {}, localOrigin = true }: { method?: string; body?: unknown; headers?: Record<string, string>; localOrigin?: boolean } = {}) => {
+    const requestHeaders: Record<string, string> = { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers }
     if (localOrigin && !Object.hasOwn(headers, 'origin')) requestHeaders.origin = origin
     const response = await fetch(origin + url, {
       method,
       headers: requestHeaders,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
-    return { response, json: response.status === 304 ? null : await response.json() }
+    return { response, json: response.status === 304 ? null : await response.json() as any }
   }
   return { dir, folder, origin, path, request, store, workspaceRoot }
 }
@@ -138,7 +139,7 @@ test('any same-origin device can enable and edit a full-access bot without pairi
 test('cross-origin browser writes cannot enable full access', async t => {
   const f = await fixture(t)
   const endpoint = `/api/bots/bunjibox/computer/enable-full-machine`
-  const response = await new Promise((resolve, reject) => {
+  const response = await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const request = http.request(f.origin + endpoint, {
       method: 'POST',
       headers: { host: '127.0.0.1:4318', origin: 'http://evil.example', 'content-type': 'application/json' },

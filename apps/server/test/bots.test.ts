@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile, stat, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { openBotStore } from '@bunji/core/bot-store'
@@ -13,6 +14,8 @@ import { BunjiSession } from '@bunji/cli/session'
 import { createBotRoutes } from '../src/routes/bots.ts'
 import { botTransport, readLegacyBots } from '@bunji/shared/bot-api'
 import { createServer as createViteServer } from 'vite'
+import type { ProxyOptions } from 'vite'
+import type { Bot, ProviderResult } from '@bunji/shared/types'
 import viteConfig from '@bunji/app/vite.config'
 
 async function directory(t) {
@@ -138,15 +141,15 @@ test('HTTP browser clients and CLI share bots live while CLI chat state stays in
   const { store, path } = await fixture(t)
   const route = createBotRoutes(store)
   const server = http.createServer((request, response) => void route(request, response))
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => server.close(resolve)))
-  const origin = `http://127.0.0.1:${server.address().port}`
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   const transport = botTransport((url, init) => fetch(origin + url, init))
   const phone = new BotClient(transport, { delay: 10000 }), desktop = new BotClient(transport, { delay: 10000 })
   const local = openBotStore({ path }), cli = new BotClient(local, { delay: 10000 })
   t.after(() => { phone.stop(); desktop.stop(); cli.stop(); local.close() })
   await Promise.all([phone.initialize(), desktop.initialize(), cli.initialize()])
-  const session = new BunjiSession({ bots: cli.getSnapshot().bots.map(cliBot), botClient: cli, run: async () => ({ ok: true, text: 'Remembered.' }) })
+  const session = new BunjiSession({ bots: cli.getSnapshot().bots.map(cliBot), botClient: cli, run: async () => ({ ok: true, text: 'Remembered.' }) as ProviderResult })
   t.after(() => session.unsubscribeBots())
   await session.send('keep this message')
   phone.update('bunjibox', { name: 'Shared agent', avatar: { shape: 'drop', color: '#e82692' } })
@@ -173,7 +176,7 @@ test('browser migration reads bots and uploaded avatars without destroying local
   const old = data.get('bunjibox.bots')
   const first = readLegacyBots(storage), second = readLegacyBots(storage)
   assert.equal(first.source, second.source)
-  assert.equal(first.bots[0].avatar.image, '/teal-bot.png')
+  assert.equal((first.bots[0] as Bot).avatar.image, '/teal-bot.png')
   assert.equal(data.get('bunjibox.bots'), old)
 })
 
@@ -181,12 +184,12 @@ test('Vite proxy preserves the browser host for same-origin saves and still reje
   const { store } = await fixture(t)
   const route = createBotRoutes(store)
   const api = http.createServer((request, response) => void route(request, response))
-  await new Promise(resolve => api.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => api.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise(resolve => api.close(resolve)))
-  const target = `http://127.0.0.1:${api.address().port}`
-  const vite = await createViteServer({ configFile: false, logLevel: 'silent', server: { host: '127.0.0.1', port: 0, hmr: false, watch: null, proxy: { '/api': { ...viteConfig.server.proxy['/api'], target } } }, optimizeDeps: { noDiscovery: true, include: [] } })
+  const target = `http://127.0.0.1:${(api.address() as AddressInfo).port}`
+  const vite = await createViteServer({ configFile: false, logLevel: 'silent', server: { host: '127.0.0.1', port: 0, hmr: false, watch: null, proxy: { '/api': { ...viteConfig.server.proxy['/api'] as ProxyOptions, target } } }, optimizeDeps: { noDiscovery: true, include: [] } })
   await vite.listen(); t.after(() => vite.close())
-  const origin = `http://127.0.0.1:${vite.httpServer.address().port}`
+  const origin = `http://127.0.0.1:${(vite.httpServer.address() as AddressInfo).port}`
   const write = from => fetch(origin + '/api/bots/bunjibox', { method: 'PATCH', headers: { origin: from, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Saved through Vite' }) })
   assert.equal((await write(origin)).status, 200)
   assert.equal(store.list().bots[0].name, 'Saved through Vite')

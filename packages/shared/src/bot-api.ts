@@ -28,7 +28,7 @@ export function botTransport(fetcher: Fetcher = fetch): BotTransport {
 
 // Read-only migration of old browser settings. Leave the old keys intact as a
 // recovery copy; the server records import receipts to prevent repeat imports.
-export function readLegacyBots(storage: Storage): LegacyBotImport | null {
+export function readLegacyBots(storage: Pick<Storage, 'getItem' | 'setItem'>): LegacyBotImport | null {
   const raw = storage.getItem('bunjibox.bots')
   const avatars = JSON.parse(storage.getItem('bunjibox.avatars') || '{}') as Record<string, unknown>
   if (!raw && !Object.keys(avatars).length) return null

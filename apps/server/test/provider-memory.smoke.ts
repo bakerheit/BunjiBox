@@ -7,12 +7,13 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { openMemoryStore } from '@bunji/core/memory-store'
 import { runProvider } from '@bunji/core/runtime'
+import type { Provider } from '@bunji/shared/types'
 
 if (process.env.BUNJI_PROVIDER_SMOKE !== '1') throw new Error('Set BUNJI_PROVIDER_SMOKE=1 to run real provider smoke checks.')
 const directory = await mkdtemp(join(await realpath(tmpdir()), 'bunji-provider-memory-smoke-'))
 try {
   const store = openMemoryStore({ directory })
-  const providers = process.env.BUNJI_SMOKE_PROVIDER ? [process.env.BUNJI_SMOKE_PROVIDER] : ['codex', 'claude']
+  const providers: Provider[] = process.env.BUNJI_SMOKE_PROVIDER ? [process.env.BUNJI_SMOKE_PROVIDER as Provider] : ['codex', 'claude']
   for (const provider of providers) {
     const secret = 'citrus-' + randomUUID().slice(0, 8)
     await store.write(provider, { title: 'Smoke verification', body: `The smoke test code is ${secret}.` })
