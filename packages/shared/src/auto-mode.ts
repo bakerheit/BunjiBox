@@ -1,11 +1,19 @@
-import { supportedModes } from './runtimes.js'
+import { supportedModes } from './runtimes.ts'
+import type { ExecutionMode, RequestedMode } from './types.ts'
+
+export interface AutoRoute {
+  mode: ExecutionMode
+  /** True when the selected model should confirm Chat is enough. */
+  modelCheck: boolean
+  reason: string
+}
 
 export const AUTO_AGENT_OPEN = '<bunji-agent-required>'
 export const AUTO_AGENT_CLOSE = '</bunji-agent-required>'
 
 export const AUTO_CHAT_INSTRUCTION = `BunjiBox is currently trying this request in lean Chat mode, without memory, web, files, shell, or computer tools. If you can fully answer without those tools, answer normally. If the request requires any unavailable tool or machine action, do not pretend to complete it. Respond only with ${AUTO_AGENT_OPEN}a short plain-language reason${AUTO_AGENT_CLOSE}. BunjiBox will then continue the same request in Agent mode within the user's saved permission limits.`
 
-const agentSignals = [
+const agentSignals: readonly { pattern: RegExp; reason: string }[] = [
   { pattern: /\b(open|use|control|click|type|write|read|show|inspect|create|save)\b.{0,60}\b(Notes|native|screen|window|fixture)\b/iu, reason: 'The request needs native computer tools.' },
   { pattern: /\b(create|edit|modify|patch|delete|remove|rename|move|copy|save|upload|download)\b.{0,50}\b(files?|folders?|director(?:y|ies)|repositor(?:y|ies)|projects?|spreadsheets?|workbooks?|documents?|pdfs?|images?|assets?|databases?)\b/iu, reason: 'The request asks to change or create files.' },
   { pattern: /\b(run|execute|install|uninstall|build|test|lint|deploy|launch|start|restart|stop)\b.{0,45}\b(command|script|server|app(?:lication)?|tests?|npm|pnpm|yarn|git|terminal|shell|service|process)\b/iu, reason: 'The request asks to run software or commands.' },
@@ -15,9 +23,9 @@ const agentSignals = [
   { pattern: /\b(use|call|open)\b.{0,30}\b(tool|terminal|shell|browser|app|connector|mcp)\b/iu, reason: 'The request explicitly asks for a tool.' },
 ]
 
-export function routeAutoPrompt(provider, prompt) {
+export function routeAutoPrompt(provider: unknown, prompt: unknown): AutoRoute {
   if (!supportedModes(provider).includes('agent')) return {
-    mode: 'chat', modelCheck: false, reason: `${provider} is connected as a chat-only provider.`,
+    mode: 'chat', modelCheck: false, reason: `${String(provider)} is connected as a chat-only provider.`,
   }
   const text = typeof prompt === 'string' ? prompt : ''
   const signal = agentSignals.find(item => item.pattern.test(text))
@@ -25,7 +33,7 @@ export function routeAutoPrompt(provider, prompt) {
   return { mode: 'chat', modelCheck: true, reason: 'No clear tool requirement was found; the selected model will verify that Chat mode is enough.' }
 }
 
-export function parseAgentHandoff(value) {
+export function parseAgentHandoff(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const text = value.trim()
   if (!text.startsWith(AUTO_AGENT_OPEN) || !text.endsWith(AUTO_AGENT_CLOSE)) return null
@@ -34,7 +42,7 @@ export function parseAgentHandoff(value) {
   return reason
 }
 
-export function modeLabel(requestedMode, resolvedMode) {
+export function modeLabel(requestedMode: RequestedMode, resolvedMode: RequestedMode): string {
   const resolved = resolvedMode === 'agent' ? 'Agent' : 'Chat'
   return requestedMode === 'auto' ? `Auto → ${resolved}` : resolved
 }

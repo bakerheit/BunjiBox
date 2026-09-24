@@ -24,6 +24,7 @@
     "wrap-ansi": "^10.0.1"
   },
   "devDependencies": {
+    "@types/marked-terminal": "^6.1.1",
     "@xterm/headless": "^6.0.0"
   }
 }

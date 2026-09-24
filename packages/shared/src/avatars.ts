@@ -1,6 +1,15 @@
 // Additive catalog: legacy IDs and their renderer geometry stay unchanged.
 // Coordinates use a 100-point square, mirrored by DistinctAvatarShapes.swift.
-export const distinctAvatarShapes = [
+export interface DistinctAvatarShape {
+  name: string
+  label: string
+  glyph: string
+  path: string
+  cx: number
+  cy: number
+}
+
+export const distinctAvatarShapes: readonly DistinctAvatarShape[] = [
   {
     "name": "comet",
     "label": "Comet",

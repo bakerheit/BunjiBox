@@ -1,0 +1,11 @@
+{
+  // Tests are typechecked for API misuse (wrong arguments, unknown fields,
+  // removed exports) without demanding annotations on every fixture and mock.
+  // Product code is checked separately with the full strict profile.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "useUnknownInCatchVariables": false
+  }
+}

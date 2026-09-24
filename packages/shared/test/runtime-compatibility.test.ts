@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { makeBot } from '../src/bots.js'
-import { normalizeMode, normalizeRuntime, supportedModes } from '../src/runtimes.js'
+import { makeBot } from '../src/bots.ts'
+import { normalizeMode, normalizeRuntime, supportedModes } from '../src/runtimes.ts'
 
 test('changing the Ollama default preserves saved Qwen agents', () => {
   const saved = makeBot({ id: 'existing-pi-agent', provider: 'ollama', model: 'qwen3:1.7b', effort: 'low' })

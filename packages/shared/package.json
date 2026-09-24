@@ -5,9 +5,10 @@
   "type": "module",
   "description": "Browser- and Node-safe code used by every BunjiBox surface: bot shapes, runtime catalog, API clients, token math.",
   "exports": {
-    "./*": "./src/*.js"
+    "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p . && tsc -p test"
   }
 }

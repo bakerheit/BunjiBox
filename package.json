@@ -11,7 +11,7 @@
     "bunji": "apps/cli/index.mjs"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.18"
   },
   "scripts": {
     "bunji": "node apps/cli/index.mjs",
@@ -25,10 +25,12 @@
     "build": "npm run build --workspaces --if-present",
     "build:site": "npm run build -w @bunji/site",
     "lint": "oxlint",
-    "test": "npm test --workspaces --if-present"
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
-    "oxlint": "^1.81.0"
+    "oxlint": "^1.81.0",
+    "typescript": "^7.0.2"
   }
 }

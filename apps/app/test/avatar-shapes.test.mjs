@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { distinctAvatarShapes } from '../../../packages/shared/src/avatars.js'
+import { distinctAvatarShapes } from '../../../packages/shared/src/avatars.ts'
 
 test('web renderer uses distinct geometry and apertures while retaining legacy eyes and images', async () => {
   const server = await createServer({ root: new URL('..', import.meta.url).pathname, server: { middlewareMode: true, hmr: false }, appType: 'custom' })

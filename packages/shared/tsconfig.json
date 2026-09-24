@@ -1,0 +1,6 @@
+{
+  // Browser- and Node-safe code. No DOM lib on purpose: anything used here must
+  // also exist in Node (fetch, AbortSignal, TextDecoder, Storage, crypto).
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"]
+}

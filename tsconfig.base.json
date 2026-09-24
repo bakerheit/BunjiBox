@@ -1,0 +1,24 @@
+{
+  // Shared compiler settings. Node runs our .ts files directly with built-in
+  // type stripping (Node >= 22.18), so tsc only typechecks: nothing is emitted.
+  // erasableSyntaxOnly keeps every file runnable by Node without a build step:
+  // no enums, namespaces, parameter properties, or other emitted TS syntax.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  }
+}

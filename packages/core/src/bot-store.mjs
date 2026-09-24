@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { defaultBots, makeBot, patchBot, legacyBot, validId } from '@bunji/shared/bots'
-import { computerProfile, defaultComputerProfile, machineComputerProfile, storedComputerProfile } from '@bunji/shared/agent-permissions'
+import { computerProfile, defaultComputerProfile, machineComputerProfile, storedComputerProfile } from './agent-permissions.ts'
 
 export const workspaceDirectory = () => process.env.BUNJI_DATA_DIR || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'bunji')
 export const workspacePath = () => join(workspaceDirectory(), 'workspace.sqlite')

@@ -1,17 +1,21 @@
+import type { ProviderResult, RunStreamEvent } from './types.ts'
+
+type StreamedResult = Partial<ProviderResult> & { type?: 'result'; ok: boolean }
+
 // Fetch streaming works on LAN HTTP, unlike browser-only secure-context APIs.
-export async function readRunResponse(response, onEvent) {
+export async function readRunResponse(response: Response, onEvent: (event: Exclude<RunStreamEvent, { type: 'result' }>) => void): Promise<StreamedResult> {
   if (!response.headers.get('content-type')?.includes('application/x-ndjson')) {
-    const result = await response.json()
+    const result = await response.json() as Partial<ProviderResult>
     return { ...result, ok: response.ok && result.ok !== false }
   }
   if (!response.ok || !response.body) throw new Error('Could not open the provider event stream.')
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
-  let buffer = '', result
-  const parse = line => {
+  let buffer = '', result: StreamedResult | undefined
+  const parse = (line: string) => {
     if (!line.trim()) return
-    const event = JSON.parse(line)
-    if (event.type === 'result') result = event
+    const event = JSON.parse(line) as RunStreamEvent
+    if (event.type === 'result') result = event as StreamedResult
     else onEvent(event)
   }
   try {

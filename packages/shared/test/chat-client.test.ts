@@ -1,15 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ChatClient } from '../src/chat-client.js'
+import { ChatClient } from '../src/chat-client.ts'
+import type { SendOptions } from '../src/chat-client.ts'
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-const deferred = () => Promise.withResolvers()
+const deferred = () => Promise.withResolvers<void>()
 const flush = () => new Promise(resolve => setImmediate(resolve))
 const runtime = { provider: 'codex', model: 'test-model', effort: 'low', mode: 'agent' }
 
 test('default fetch is called without the ChatClient receiver used by member calls', async t => {
   let receiver
-  t.mock.method(globalThis, 'fetch', function () {
+  t.mock.method(globalThis, 'fetch', function (this: unknown) {
+    // oxlint-disable-next-line typescript/no-this-alias -- The test records the fetch receiver.
     receiver = this
     if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation')
     return Promise.resolve(response({ requests: [], revision: 0, hasMore: false, nextBefore: null }))
@@ -44,13 +46,13 @@ function server(pageSize = 2) {
     const tail = rows.slice(-pageSize), hasMore = rows.length > tail.length
     return { requests: tail.map(row => row.request), revision: state.revision, hasMore, nextBefore: hasMore ? String(tail[0].seq) : null }
   }
-  async function fetcher(path, options = {}) {
+  async function fetcher(path: string, options: RequestInit = {}) {
     const url = new URL(path, 'http://local.test')
     const parts = url.pathname.split('/').map(decodeURIComponent)
     calls.push({ path, options })
     if (parts[4] === 'history') return response(history(parts[3], url.searchParams.get('before')))
     if (parts[4] === 'messages') {
-      const input = JSON.parse(options.body), existing = bot(parts[3]).rows.find(row => row.request.id === input.id)
+      const input = JSON.parse(options.body as string), existing = bot(parts[3]).rows.find(row => row.request.id === input.id)
       if (existing) return response({ request: existing.request, created: false })
       executions++
       return response({ request: append(parts[3], { ...input, status: 'running', text: '' }), created: true }, 202)
@@ -69,8 +71,8 @@ function server(pageSize = 2) {
 test('full-Mac messages use the same request headers as regular messages', async () => {
   const api = server()
   const client = new ChatClient({ fetcher: api.fetcher })
-  await client.send('a', 'Regular request', { ...runtime, computer: { scope: 'none' } })
-  await client.send('a', 'Full access request', { ...runtime, computer: { scope: 'machine' } })
+  await client.send('a', 'Regular request', { ...runtime, computer: { scope: 'none' } } as SendOptions)
+  await client.send('a', 'Full access request', { ...runtime, computer: { scope: 'machine' } } as SendOptions)
   const posts = api.calls.filter(call => call.path.endsWith('/messages'))
   assert.deepEqual(posts[0].options.headers, { 'content-type': 'application/json' })
   assert.deepEqual(posts[1].options.headers, { 'content-type': 'application/json' })
@@ -129,7 +131,7 @@ test('ambiguous responses keep the same run ID on retry, including malformed JSO
     const api = server(), ids = []
     const client = new ChatClient({ fetcher: async (path, options) => {
       if (options.method !== 'POST') return api.fetcher(path, options)
-      ids.push(JSON.parse(options.body).id)
+      ids.push(JSON.parse(options.body as string).id)
       const accepted = await api.fetcher(path, options)
       return ids.length === 1 ? fail(accepted) : accepted
     } })
@@ -145,10 +147,10 @@ test('a definite rejection releases the pending ID and labels the failing bot', 
   const api = server(), ids = []
   const client = new ChatClient({ fetcher: async (path, options) => {
     if (options.method !== 'POST') return api.fetcher(path, options)
-    ids.push(JSON.parse(options.body).id)
+    ids.push(JSON.parse(options.body as string).id)
     return ids.length === 1 ? response({ error: 'Invalid model' }, 400) : api.fetcher(path, options)
   } })
-  await assert.rejects(client.send('a', 'Try', runtime), error => error.status === 400 && error.botId === 'a' && /Invalid model/.test(error.message))
+  await assert.rejects(client.send('a', 'Try', runtime), (error: any) => error.status === 400 && error.botId === 'a' && /Invalid model/.test(error.message))
   await client.send('a', 'Try', runtime)
   assert.notEqual(ids[0], ids[1])
   assert.equal(api.executions, 1)
@@ -194,7 +196,7 @@ test('valid bot IDs that match Object properties have no inherited errors', asyn
   client.activate('constructor')
   assert.equal(client.getSnapshot().error, '')
   await client.refresh('constructor')
-  assert.equal(client.getSnapshot().histories.constructor.ready, true)
+  assert.equal(client.getSnapshot().histories[String('constructor')].ready, true)
 })
 
 test('switching bots during reads or sends keeps histories and errors scoped', async () => {
@@ -235,7 +237,7 @@ test('a late send failure identifies its original bot without leaking a global e
   const send = client.send('a', 'For A', runtime)
   client.activate('b'); await client.refresh('b')
   waiting.resolve()
-  await assert.rejects(send, error => error.botId === 'a' && /bot.*a/i.test(error.message))
+  await assert.rejects(send, (error: any) => error.botId === 'a' && /bot.*a/i.test(error.message))
   assert.equal(client.getSnapshot().error, '')
 })
 

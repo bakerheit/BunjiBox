@@ -6,7 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { distinctAvatarShapes } from '../../../packages/shared/src/avatars.js'
+import { distinctAvatarShapes } from '../../../packages/shared/src/avatars.ts'
 
 test('compiled Swift silhouettes, labels and aperture positions match the shared web catalog', { skip: process.platform !== 'darwin' }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'bunji-avatar-check-'))

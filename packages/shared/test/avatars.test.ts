@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { distinctAvatarShapes } from '../src/avatars.js'
-import { avatarValue, shapes, makeBot, patchBot, cliBot, cliChanges } from '../src/bots.js'
+import { distinctAvatarShapes } from '../src/avatars.ts'
+import { avatarValue, shapes, makeBot, patchBot, cliBot, cliChanges } from '../src/bots.ts'
 
 test('six distinct avatars validate and round trip through CLI edits', () => {
   assert.equal(distinctAvatarShapes.length, 6)
